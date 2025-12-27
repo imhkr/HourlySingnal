@@ -76,8 +76,8 @@ Bot generates an AI tweet about your custom topic (with safety check!).
 ### 1. Clone & Install
 
 ```bash
-git clone https://github.com/imhkr/HourlySingnal.git
-cd HourlySingnal
+git clone https://github.com/imhkr/HourlySignal.git
+cd HourlySignal
 npm install
 ```
 

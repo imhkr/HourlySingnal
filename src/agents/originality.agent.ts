@@ -1,10 +1,6 @@
 import { getBeastMode, BeastModeAI } from '../services/ai/beast-mode.service';
 import { log } from '../utils/logger';
 
-/**
- * Originality Agent - Uses Beast Mode AI
- * ALWAYS rewrites to avoid plagiarism
- */
 export class OriginalityAgent {
     private ai: BeastModeAI;
 
@@ -30,13 +26,11 @@ export class OriginalityAgent {
             try {
                 const rewritten = await this.ai.rewriteOriginal(summary, originalTitles, maxChars);
 
-                // Clean the result
                 const cleaned = rewritten
                     .replace(/^["']|["']$/g, '')
                     .replace(/^(Your|Rewrite|Original)[^:]*:/i, '')
                     .trim();
 
-                // Check if it's different enough
                 if (!this.isTooSimilar(cleaned, originalTitles)) {
                     log.info(`✅ Original: "${cleaned}"`);
                     return {
@@ -52,7 +46,6 @@ export class OriginalityAgent {
             }
         }
 
-        // Fallback - generate safe generic text
         const fallback = this.generateSafeFallback(originalTitles);
         return {
             finalSummary: fallback,
@@ -64,7 +57,6 @@ export class OriginalityAgent {
     private isTooSimilar(text: string, originals: string[]): boolean {
         const textLower = text.toLowerCase();
 
-        // Ignore common proper nouns, names, places that will naturally match
         const ignoreTerms = [
             'ballon', "d'or", 'india', 'world', 'cup', 'premier', 'league',
             'cricket', 'football', 'award', 'bravery', 'olympics', 'test',
@@ -74,11 +66,8 @@ export class OriginalityAgent {
         for (const original of originals) {
             const originalLower = original.toLowerCase();
 
-            // Only check for LONG phrase matches (5+ words)
-            // This prevents flagging on common 2-word terms
             const originalWords = originalLower.split(/\s+/).filter(w => w.length > 2);
 
-            // Check 5-word phrase matches (was 2 words - too strict)
             for (let i = 0; i < originalWords.length - 4; i++) {
                 const phrase = originalWords.slice(i, i + 5).join(' ');
                 if (textLower.includes(phrase)) {
@@ -87,7 +76,6 @@ export class OriginalityAgent {
                 }
             }
 
-            // Check if 50%+ of sentence is identical (was 30% - too strict)
             const textWords = textLower.split(/\s+/).filter(w =>
                 w.length > 3 && !ignoreTerms.includes(w)
             );
@@ -100,7 +88,6 @@ export class OriginalityAgent {
                 if (textWords.some(tw => tw === word)) matchCount++;
             }
 
-            // Only flag if 50%+ words match (excluding common terms)
             if (origFiltered.length > 5 && matchCount / origFiltered.length > 0.5) {
                 log.warn(`High word overlap: ${matchCount}/${origFiltered.length}`);
                 return true;

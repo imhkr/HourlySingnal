@@ -3,11 +3,7 @@ import config from '../../config';
 import { NewsArticle, NewsCategory, INewsFetcher } from '../../types';
 import { log } from '../../utils/logger';
 
-/**
- * GNews API Service
- * Secondary news source for backup and diversity
- * Free tier: 100 requests/day
- */
+// Secondary news source with automatic key rotation
 export class GNewsService implements INewsFetcher {
     private client: AxiosInstance;
     private baseUrl = 'https://gnews.io/api/v4';
@@ -27,11 +23,9 @@ export class GNewsService implements INewsFetcher {
     private async request(endpoint: string, params: any): Promise<any> {
         let attempts = 0;
 
-        // Loop until we find a working key or run out of keys
         while (attempts < this.apiKeys.length) {
             const apiKey = this.apiKeys[this.currentKeyIndex];
 
-            // Skip known exhausted keys
             if (this.exhaustedKeys.has(apiKey)) {
                 log.warn(`Skipping exhausted GNews Key ${this.currentKeyIndex + 1}...`);
                 this.currentKeyIndex = (this.currentKeyIndex + 1) % this.apiKeys.length;
@@ -39,7 +33,6 @@ export class GNewsService implements INewsFetcher {
                 continue;
             }
 
-            // Retry loop for QPS limits (same key)
             for (let retry = 0; retry < 3; retry++) {
                 try {
                     const response = await this.client.get(endpoint, {
@@ -54,7 +47,6 @@ export class GNewsService implements INewsFetcher {
                     const data = error.response?.data;
                     const message = data?.message || data?.errors?.[0] || error.message || 'Unknown';
 
-                    // Check for QPS Limit (429 or "short period")
                     const isQpsLimit = status === 429 || (status === 403 && message.includes('short period'));
 
                     if (isQpsLimit) {
@@ -63,7 +55,6 @@ export class GNewsService implements INewsFetcher {
                         continue; // Retry same key
                     }
 
-                    // Check for Daily Limit / Invalid Key
                     const isDailyLimit = status === 401 || (status === 403 && message.includes('request limit'));
 
                     if (isDailyLimit) {
@@ -73,21 +64,16 @@ export class GNewsService implements INewsFetcher {
                         break;
                     }
 
-                    throw error; // Other fatal error
+                    throw error;
                 }
             }
 
-            // If we broke out of retry loop (Daily Limit) or exhausted retries:
-            // Rotate key and continue outer loop
             this.currentKeyIndex = (this.currentKeyIndex + 1) % this.apiKeys.length;
             attempts++;
         }
         throw new Error('All GNews API keys exhausted');
     }
 
-    /**
-     * Fetch news articles from GNews
-     */
     async fetchNews(category: NewsCategory, limit: number = 5): Promise<NewsArticle[]> {
         try {
             const params = this.buildParams(category);
@@ -114,9 +100,6 @@ export class GNewsService implements INewsFetcher {
         }
     }
 
-    /**
-     * Search for specific news (useful for YouTuber news)
-     */
     async searchNews(query: string, category: NewsCategory, limit: number = 5): Promise<NewsArticle[]> {
         try {
             log.api('GNews', '/search', 0);
@@ -142,9 +125,6 @@ export class GNewsService implements INewsFetcher {
         }
     }
 
-    /**
-     * Build query parameters based on category
-     */
     private buildParams(category: NewsCategory): Record<string, string> {
         switch (category) {
             case 'indian-news':
@@ -216,9 +196,6 @@ export class GNewsService implements INewsFetcher {
         }
     }
 
-    /**
-     * Transform API response to NewsArticle format
-     */
     private transformArticles(articles: any[], category: NewsCategory): NewsArticle[] {
         const cutoff = Date.now() - 24 * 60 * 60 * 1000;
 

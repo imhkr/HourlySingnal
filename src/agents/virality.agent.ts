@@ -1,9 +1,6 @@
 import { getBeastMode, BeastModeAI } from '../services/ai/beast-mode.service';
 import { log } from '../utils/logger';
 
-/**
- * Virality Agent - Uses Beast Mode AI
- */
 export class ViralityAgent {
     private ai: BeastModeAI;
 
@@ -44,7 +41,6 @@ export class ViralityAgent {
 
         const enhanced = await this.ai.enhanceVirality(tweetContent, suggestions);
 
-        // Extract hashtags from enhanced text
         const hashtags = enhanced.match(/#\w+/g) || [];
 
         return {

@@ -17,20 +17,11 @@ import { log } from '../utils/logger';
 import { getTrendingHashtags } from '../utils/trending';
 import { getBeastMode, BeastModeAI } from '../services/ai/beast-mode.service';
 
-/**
- * Tweet Composer - SMART THREAD MODE
- * Main tweet = Most viral story (longest/most detailed)
- * Reply = Other categories summary
- * Tracks daily usage to stay under 17 tweets/day
- */
 export class TweetComposer {
     private readonly MAX_TWEET = 275;
     private static dailyTweetCount = 0;
     private static lastResetDate = new Date().toDateString();
 
-    /**
-     * Compose smart thread: Main viral + Reply with others
-     */
     compose(
         headline: string,
         summaries: Map<NewsCategory, string>,
@@ -39,22 +30,18 @@ export class TweetComposer {
     ): MegaTweet {
         const timestamp = new Date();
 
-        // Reset daily counter at midnight
         const today = new Date().toDateString();
         if (TweetComposer.lastResetDate !== today) {
             TweetComposer.dailyTweetCount = 0;
             TweetComposer.lastResetDate = today;
         }
 
-        // Get all valid stories sorted by length
         const stories = this.getSortedStories(summaries);
 
-        // Calculate usage
         const maxDaily = sheetConfig?.maxDailyTweets || 17;
         const remainingTweets = maxDaily - TweetComposer.dailyTweetCount;
 
         let tweets: string[];
-        // For now we use single tweet mode for better focus, but keeping logic for future
         tweets = [this.buildTweetWithConfig(stories, sheetConfig)];
         TweetComposer.dailyTweetCount += 1;
 
@@ -71,9 +58,6 @@ export class TweetComposer {
         };
     }
 
-    /**
-     * Get stories sorted by detail/virality (longer = better)
-     */
     private getSortedStories(summaries: Map<NewsCategory, string>): { cat: NewsCategory; text: string }[] {
         const stories: { cat: NewsCategory; text: string }[] = [];
 
@@ -83,46 +67,68 @@ export class TweetComposer {
             }
         }
 
-        // Sort by length
         return stories.sort((a, b) => b.text.length - a.text.length);
     }
 
-    /**
-     * Truncate at word boundary
-     */
     private truncateAtWord(text: string, maxLen: number): string {
         if (text.length <= maxLen) return text;
+
+        // Find last sentence end
         const truncated = text.slice(0, maxLen);
+        const lastSentenceEnd = Math.max(
+            truncated.lastIndexOf('. '),
+            truncated.lastIndexOf('! '),
+            truncated.lastIndexOf('? '),
+            truncated.lastIndexOf('.'),
+            truncated.lastIndexOf('!'),
+            truncated.lastIndexOf('?')
+        );
+
+        if (lastSentenceEnd > maxLen * 0.4) {
+            return truncated.slice(0, lastSentenceEnd + 1).trim();
+        }
+
+        // Word boundary fallback
         const lastSpace = truncated.lastIndexOf(' ');
-        return lastSpace > maxLen * 0.6 ? truncated.slice(0, lastSpace) : truncated;
+        if (lastSpace > maxLen * 0.6) {
+            return truncated.slice(0, lastSpace).trim() + '...';
+        }
+
+        return truncated.slice(0, maxLen - 3).trim() + '...';
     }
 
-    // Builds tweet using Google Sheets config
     private buildTweetWithConfig(stories: { cat: NewsCategory; text: string }[], sheetConfig?: SheetConfig): string {
         // Use Google Sheet config if available
         const emoji = sheetConfig?.botEmoji || config.bot.botEmoji;
-        const hashtags = sheetConfig?.hashtags?.join(' ') || config.bot.customHashtags.join(' ');
+
+        // Custom hashtag logic for fallbacks
+        let hashtags = '';
+        if (sheetConfig?.hashtags && sheetConfig.hashtags.length > 0 && sheetConfig.hashtags[0] !== '') {
+            hashtags = sheetConfig.hashtags.join(' ');
+        } else if (stories[0]?.cat === 'custom') {
+            // Generate meaningful hashtag from story content
+            const words = stories[0].text.split(' ')
+                .filter(w => w.length > 4 && /^[a-zA-Z]+$/.test(w))
+                .slice(0, 2)
+                .map(w => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase());
+            hashtags = words.length > 0 ? `#${words.join('')}` : '#Interesting';
+        } else {
+            hashtags = config.bot.customHashtags.join(' ');
+        }
 
         const story1 = stories[0];
         if (!story1) return 'No updates at this time';
 
-        // Dynamic label based on category
-        let label = 'UPDATE';
-        if (story1.cat !== 'custom') {
-            const catLabel = story1.cat.replace(/-/g, ' ').toUpperCase();
-            label = `${catLabel} UPDATE`;
-        }
+        // Emoji only + News text. Removed all 'UPDATE' or category text labels.
+        const label = '';
 
-        const text1 = this.truncateAtWord(story1.text, 220);
-        return `${emoji} ${label}\n\n${text1}\n\n${hashtags}`;
+        const text1 = this.truncateAtWord(story1.text, 200);
+        return `${emoji}${label ? ' ' + label : ''}\n\n${text1}${hashtags ? '\n\n' + hashtags : ''}`.trim();
     }
 }
 
 
-/**
- * Main Pipeline Orchestrator
- * Coordinates the entire flow from fetching to tweeting
- */
+// Core pipeline for fetching, AI processing, and posting
 export class Pipeline {
     private fetcher: FetcherAgent;
     private summarizer: SummarizerAgent;
@@ -151,9 +157,6 @@ export class Pipeline {
         this.ai = getBeastMode();
     }
 
-    /**
-     * Run the complete pipeline
-     */
     async run(userOpinion?: string): Promise<{
         success: boolean;
         tweetIds: string[];
@@ -170,10 +173,8 @@ export class Pipeline {
         log.info('🚀 Pipeline started');
 
         try {
-            // Fetch config from Google Sheets (or fallback to local)
             const sheetConfig = await getSheetConfig().getConfig();
 
-            // Check if bot is active (can be turned off from Google Sheet!)
             if (!sheetConfig.isActive) {
                 log.warn('⚠️ Bot is DISABLED in Google Sheets config');
                 return { success: false, tweetIds: [], summaries: new Map() };
@@ -181,11 +182,9 @@ export class Pipeline {
 
             const summaries = new Map<NewsCategory, string>();
 
-            // 🎯 CUSTOM TOPIC MODE (isNewsTweet = false)
             if (!sheetConfig.isNewsTweet && sheetConfig.customTopic) {
                 log.info(`📝 Custom Topic Mode: "${sheetConfig.customTopic}"`);
 
-                // Step 1: Content Moderation - Check if topic is appropriate
                 const moderation = await this.ai.moderateContent(sheetConfig.customTopic);
 
                 if (!moderation.isSafe) {
@@ -196,21 +195,35 @@ export class Pipeline {
                     return { success: false, tweetIds: [], summaries: new Map() };
                 }
 
-                // Step 2: Generate tweet about custom topic
                 const customTweet = await this.ai.generateCustomTopicTweet(sheetConfig.customTopic, 200);
                 summaries.set('custom' as NewsCategory, customTweet);
 
-                // Step 3: Build and post custom topic tweet
                 log.info('✅ Custom topic processed, posting tweet...');
 
                 const emoji = sheetConfig.botEmoji || config.bot.botEmoji;
-                const hashtags = sheetConfig.hashtags?.join(' ') || config.bot.customHashtags.join(' ');
 
-                // Dynamic label (not just cricket!)
-                const updateLabel = 'UPDATE';
-                const fullTweet = `${emoji} ${updateLabel}\n\n${customTweet}\n\n${hashtags}`;
+                // For custom topics: generate meaningful hashtags from content
+                // Only use sheet hashtags if explicitly set (not default #News #Breaking)
+                let hashtags = '';
+                const isDefaultHashtags = sheetConfig.hashtags.length === 2 &&
+                    sheetConfig.hashtags[0] === '#News' &&
+                    sheetConfig.hashtags[1] === '#Breaking';
 
-                // Generate image
+                if (sheetConfig.hashtags && sheetConfig.hashtags.length > 0 &&
+                    sheetConfig.hashtags[0] !== '' && !isDefaultHashtags) {
+                    // User explicitly set custom hashtags in sheet
+                    hashtags = sheetConfig.hashtags.join(' ');
+                } else {
+                    // Generate hashtag from topic keywords
+                    const topicWords = sheetConfig.customTopic.split(' ')
+                        .filter(w => w.length > 3 && /^[a-zA-Z]+$/.test(w))
+                        .slice(0, 2)
+                        .map(w => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase());
+                    hashtags = topicWords.length > 0 ? `#${topicWords.join('')}` : '#Trending';
+                }
+
+                const fullTweet = `${emoji}\n\n${customTweet}\n\n${hashtags}`;
+
                 const imagePath = await this.imageService.generateNewsImage(customTweet);
 
                 let tweetIds: string[] = [];
@@ -233,17 +246,13 @@ export class Pipeline {
                 return { success, tweetIds, summaries };
 
             } else {
-                // 📰 NEWS MODE (default)
-                // Use category from Google Sheet (remote) or fallback to .env
-                const categories: NewsCategory[] = [
-                    sheetConfig.activeCategory || config.bot.activeCategory,
-                ];
+                const categories: NewsCategory[] = sheetConfig.activeCategories.length > 0
+                    ? sheetConfig.activeCategories
+                    : [config.bot.activeCategory];
 
-                // Step 1: Fetch and summarize for each category
                 for (const category of categories) {
                     log.info(`Processing category: ${category}`);
 
-                    // Fetch news
                     const articles = await this.fetcher.fetch(category, 5);
 
                     if (articles.length === 0) {
@@ -252,15 +261,12 @@ export class Pipeline {
                         continue;
                     }
 
-                    // Summarize with Reflexion loop
-                    // Use shorter summaries for International & Tech to fit in one tweet
-                    const maxChars = (category === 'international-news' || category === 'technology') ? 105 : 180;
+                    const maxChars = 200; // Fixed limit for all categories
                     let summary = await this.summarizer.summarize(articles, maxChars);
                     let iteration = 0;
                     const maxIterations = config.app.maxReflexionIterations;
 
                     while (iteration < maxIterations) {
-                        // Evaluate
                         const evaluation = await this.evaluator.evaluate(summary);
 
                         log.reflexion(iteration + 1, evaluation.score, evaluation.passed);
@@ -270,7 +276,6 @@ export class Pipeline {
                             break;
                         }
 
-                        // Store feedback in memory
                         memory.store({
                             category,
                             originalSummary: summary.oneLiner,
@@ -279,15 +284,11 @@ export class Pipeline {
                             improvement: 0,
                         });
 
-                        // Refine
                         const previousFeedback = memory.getRecent(category, 3);
-                        summary = await this.refiner.refine(summary, evaluation.feedback, previousFeedback);
 
                         iteration++;
                     }
 
-                    // Step 1.5: ORIGINALITY CHECK 📝
-                    // Rewrite in unique language to avoid plagiarism
                     log.info('📝 Checking originality...');
                     const originalTitles = articles.map(a => a.title);
                     const originalResult = await this.originalityAgent.ensureOriginal(
@@ -306,11 +307,9 @@ export class Pipeline {
                     // Use the original (unique) version
                     summaries.set(category, originalResult.finalSummary);
 
-                    // Small delay between categories
                     await this.delay(1000);
                 }
 
-                // Step 2: Generate headline
                 const headline = await this.headlineAgent.generate(summaries);
 
                 // AUTO-OPINION: If no user opinion, generate one via AI
@@ -328,7 +327,6 @@ export class Pipeline {
                     }
                 }
 
-                // Step 3: Compose mega-tweet
                 let megaTweet = this.composer.compose(headline, summaries, sheetConfig, opinion);
 
                 log.info('📝 Mega-tweet composed', {
@@ -337,10 +335,8 @@ export class Pipeline {
                     charCount: megaTweet.characterCount,
                 });
 
-                // Step 4: VIRALITY CHECK & ENHANCEMENT 🔥
                 log.info('🔥 Running virality check...');
 
-                // Check virality of the first tweet (main content)
                 const viralResult = await this.viralityAgent.ensureViral(
                     megaTweet.tweets[0],
                     2 // max 2 enhancement iterations
@@ -353,7 +349,6 @@ export class Pipeline {
                         hook: viralResult.engagementHook.slice(0, 50),
                     });
 
-                    // Update the tweet with enhanced version
                     megaTweet.tweets[0] = viralResult.finalTweet;
                 } else {
                     log.info('✅ Tweet already viral-ready!', {
@@ -361,7 +356,6 @@ export class Pipeline {
                     });
                 }
 
-                // Step 5: Validate & Post to Twitter WITH IMAGE
                 const firstTweet = megaTweet.tweets[0] || '';
                 if (firstTweet.toLowerCase().includes('no updates') || firstTweet.length < 20) {
                     log.error('❌ Generated content is empty ("No updates"). Aborting Tweet.');
@@ -372,7 +366,6 @@ export class Pipeline {
                     };
                 }
 
-                // Generate contextual image
                 log.info(`🖼️ Generating AI image for ${sheetConfig.activeCategory}...`);
                 const imagePath = await this.imageService.generateNewsImage(firstTweet);
 
@@ -418,9 +411,6 @@ export class Pipeline {
         }
     }
 
-    /**
-     * Test run without posting to Twitter
-     */
     async dryRun(): Promise<Map<NewsCategory, string>> {
         log.info('🧪 Dry run started (no tweeting)');
 
@@ -465,10 +455,10 @@ export class Pipeline {
         }
 
         // NEWS MODE
-        log.info(`📰 NEWS MODE: Fetching ${sheetConfig.activeCategory}`);
-        const categories: NewsCategory[] = [
-            sheetConfig.activeCategory || config.bot.activeCategory,
-        ];
+        log.info(`📰 NEWS MODE: Fetching ${sheetConfig.activeCategories.join(', ')}`);
+        const categories: NewsCategory[] = sheetConfig.activeCategories.length > 0
+            ? sheetConfig.activeCategories
+            : [config.bot.activeCategory];
 
         for (const category of categories) {
             log.info(`\n📰 Processing: ${category}`);

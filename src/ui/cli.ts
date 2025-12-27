@@ -6,9 +6,7 @@ import { validateConfig } from '../config';
 import { log } from '../utils/logger';
 import { TwitterService } from '../services/social/twitter.service';
 
-/**
- * CLI Interface for HourlySignal
- */
+// Interactive command-line interface
 export class CLI {
     private pipeline: Pipeline;
     private scheduler: Scheduler;
@@ -18,9 +16,7 @@ export class CLI {
         this.scheduler = new Scheduler();
     }
 
-    /**
-     * Start the CLI
-     */
+    // Entry point that validates config and shows the menu
     async start(): Promise<void> {
         console.log(chalk.cyan.bold('\n🔥 HourlySignal - Reflexion Pattern News Agent\n'));
 
@@ -40,9 +36,7 @@ export class CLI {
         await this.showMainMenu();
     }
 
-    /**
-     * Show main menu
-     */
+    // List of available actions
     private async showMainMenu(): Promise<void> {
         const { action } = await inquirer.prompt([
             {
@@ -88,9 +82,7 @@ export class CLI {
         await this.showMainMenu();
     }
 
-    /**
-     * Run pipeline with user opinion
-     */
+    // Fetches news and allows user to add a comment before posting
     private async runWithOpinion(): Promise<void> {
         console.log(chalk.cyan('\n📰 Fetching and summarizing news...\n'));
 
@@ -135,9 +127,7 @@ export class CLI {
         }
     }
 
-    /**
-     * Run pipeline automatically
-     */
+    // Triggers a fetch and post without any user input
     private async runAuto(): Promise<void> {
         console.log(chalk.yellow('\n⏳ Running pipeline (no opinion)...\n'));
 
@@ -151,9 +141,7 @@ export class CLI {
         }
     }
 
-    /**
-     * Start the scheduler
-     */
+    // Starts the auto-loop
     private async startScheduler(): Promise<void> {
         console.log(chalk.cyan('\n⏰ Starting scheduler...\n'));
 
@@ -166,10 +154,7 @@ export class CLI {
         await new Promise(() => { });
     }
 
-    /**
-     * Dry run (no tweeting) - WITH TWEET PREVIEW
-     * Generates HTML preview with image like actual tweet
-     */
+    // Local test - generates content and an HTML file for checking
     private async dryRun(): Promise<void> {
         console.log(chalk.cyan('\n🧪 Running dry test with preview...\n'));
 
@@ -199,9 +184,9 @@ export class CLI {
         const hashtags = sheetConfig.hashtags?.join(' ') || '#News #Breaking';
         const botName = sheetConfig.botName || 'HourlySignal';
         const isCustomMode = !sheetConfig.isNewsTweet && sheetConfig.customTopic;
-        const updateLabel = isCustomMode ? 'UPDATE' : sheetConfig.activeCategory.replace(/-/g, ' ').toUpperCase() + ' UPDATE';
+        const updateLabel = '';
 
-        const fullTweet = `${emoji} ${updateLabel}\n\n${tweetText}\n\n${hashtags}`;
+        const fullTweet = `${emoji}${updateLabel ? ' ' + updateLabel : ''}\n\n${tweetText}\n\n${hashtags}`.trim();
 
         // Generate image
         const imagePath = await imageService.generateNewsImage(tweetText);
@@ -328,9 +313,7 @@ export class CLI {
         imageService.cleanup();
     }
 
-    /**
-     * Check Twitter quota and local stats
-     */
+    // Shows how many tweets are left for the day
     private async checkQuota(): Promise<void> {
         console.log(chalk.cyan('\n📊 Twitter Quota & Stats:\n'));
 
@@ -357,9 +340,7 @@ export class CLI {
         console.log('');
     }
 
-    /**
-     * Verify Twitter credentials
-     */
+    // Tests X API connection
     private async verifyTwitter(): Promise<void> {
         console.log(chalk.cyan('\n🔑 Verifying Twitter credentials...\n'));
 
@@ -374,9 +355,7 @@ export class CLI {
         }
     }
 
-    /**
-     * Show memory statistics
-     */
+    // Prints AI performance data
     private async showMemoryStats(): Promise<void> {
         const { memory } = await import('../agents/memory');
         const stats = memory.getStats();
@@ -392,9 +371,7 @@ export class CLI {
     }
 }
 
-/**
- * Ask for opinion (can be called from scheduler too)
- */
+// Utility for picking up user input from the console
 export async function askForOpinion(prompt?: string): Promise<string | undefined> {
     const { opinion } = await inquirer.prompt([
         {

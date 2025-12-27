@@ -3,21 +3,10 @@ import { MistralService } from './mistral.service';
 import config from '../../config';
 import { log } from '../../utils/logger';
 
-/**
- * 🔥 BEAST MODE AI Service - PRODUCTION GRADE
- * 
- * Features:
- * - MISTRAL PRIMARY (60 RPM)
- * - Gemini as backup only
- * - Circuit breaker: If Gemini fails once, disable for 5 minutes
- * - INSTANT fallback - no waiting
- * - Zero rate limit issues
- */
 export class BeastModeAI {
     private gemini: GeminiService | null = null;
     private mistral: MistralService | null = null;
 
-    // Circuit breaker for Gemini
     private geminiDisabled: boolean = false;
     private geminiDisabledUntil: number = 0;
     private geminiFailCount: number = 0;
@@ -25,7 +14,6 @@ export class BeastModeAI {
     private callCount: number = 0;
 
     constructor() {
-        // Initialize providers
         if (config.ai.mistralApiKey) {
             this.mistral = new MistralService();
             log.info('🟠 Mistral initialized (PRIMARY)');
@@ -43,15 +31,11 @@ export class BeastModeAI {
         log.info('🔥 BEAST MODE activated - Production Grade!');
     }
 
-    /**
-     * Check if Gemini circuit breaker is open
-     */
     private isGeminiAvailable(): boolean {
         if (!this.gemini) return false;
 
         if (this.geminiDisabled) {
             if (Date.now() > this.geminiDisabledUntil) {
-                // Re-enable after cooldown
                 this.geminiDisabled = false;
                 this.geminiFailCount = 0;
                 log.info('🔷 Gemini re-enabled after cooldown');
@@ -63,36 +47,23 @@ export class BeastModeAI {
         return true;
     }
 
-    /**
-     * Handle Gemini failure - activate circuit breaker
-     */
     private handleGeminiFailure(error: any): void {
         this.geminiFailCount++;
 
         if (error.message?.includes('429') || error.message?.includes('Too Many')) {
-            // Rate limit - disable for 5 minutes
             this.geminiDisabled = true;
             this.geminiDisabledUntil = Date.now() + 5 * 60 * 1000;
             log.warn('⚠️ Gemini rate limited - disabled for 5 minutes, using Mistral only');
         } else if (this.geminiFailCount >= 3) {
-            // 3 consecutive failures - disable for 2 minutes
             this.geminiDisabled = true;
             this.geminiDisabledUntil = Date.now() + 2 * 60 * 1000;
             log.warn('⚠️ Gemini failed 3 times - disabled for 2 minutes');
         }
     }
 
-    /**
-     * MAIN GENERATE METHOD - Production Grade
-     * 
-     * Priority:
-     * 1. Always try Mistral first (60 RPM, higher limit)
-     * 2. Only use Gemini if Mistral fails AND Gemini available
-     */
     async generate(prompt: string): Promise<string> {
         this.callCount++;
 
-        // MISTRAL FIRST - Always
         if (this.mistral) {
             try {
                 return await this.mistral.generate(prompt);
@@ -103,7 +74,6 @@ export class BeastModeAI {
             }
         }
 
-        // GEMINI BACKUP - Only if Mistral fails and Gemini available
         if (this.isGeminiAvailable() && this.gemini) {
             try {
                 return await this.gemini.generate(prompt, 1); // Only 1 retry, no waiting
@@ -115,14 +85,10 @@ export class BeastModeAI {
             }
         }
 
-        // FALLBACK - Return safe default
         log.warn('All AI providers failed, using safe default');
         return this.getSafeDefault(prompt);
     }
 
-    /**
-     * Safe default when all providers fail
-     */
     private getSafeDefault(prompt: string): string {
         if (prompt.includes('summary') || prompt.includes('NEWS')) {
             return 'Breaking news update - check back soon! 📰';
@@ -141,13 +107,7 @@ export class BeastModeAI {
 
     // ============ HIGH LEVEL METHODS ============
 
-    /**
-     * Summarize news with FULL CONTEXT - No vague references
-     */
-    /**
-     * Summarize news with FULL CONTEXT - No vague references
-     */
-    async summarize(articles: { title: string; description: string; source: string }[], maxChars: number = 180): Promise<string> {
+    async summarize(articles: { title: string; description: string; source: string }[], maxChars: number = 200): Promise<string> {
         const articlesText = articles
             .slice(0, 3)
             .map((a, i) => `${i + 1}. ${a.title}${a.description ? ' - ' + a.description.slice(0, 100) : ''}`)
@@ -157,7 +117,7 @@ export class BeastModeAI {
 Write like a human reporter - natural, professional, but not robotic. 
 MUST include full context (Names, Places, Numbers).
 CRITICAL:
-1. END with a complete sentence. DO NOT cut off.
+1. MUST END with a complete sentence + PERIOD (.). DO NOT cut off.
 2. NO transition words like "Elsewhere", "Meanwhile", "In other news".
 3. NO introduction like "Here is the summary". Just the story.
 
@@ -192,9 +152,6 @@ YOUR DETAILED SUMMARY WITH FULL CONTEXT:`;
             .trim();
     }
 
-    /**
-     * Evaluate summary quality
-     */
     async evaluate(summary: string, articles: { title: string }[]): Promise<{
         passed: boolean;
         score: number;
@@ -224,16 +181,13 @@ JSON: { "score": X, "feedback": "..." }`;
         return { passed: true, score: 7, feedback: '' };
     }
 
-    /**
-     * Rewrite for originality - CLEAN OUTPUT
-     */
-    async rewriteOriginal(summary: string, avoidPhrases: string[], maxChars: number = 180): Promise<string> {
+    async rewriteOriginal(summary: string, avoidPhrases: string[], maxChars: number = 200): Promise<string> {
         const banned = avoidPhrases.slice(0, 2).join(', ').slice(0, 100);
 
         const prompt = `Rewrite this news in different words (max ${maxChars} chars).
 Write like a human reporter.
 CRITICAL:
-1. END with a complete sentence.
+1. MUST END with a complete sentence + PERIOD (.).
 2. NO transition words ("Elsewhere", "Meanwhile").
 3. NO markdown, NO asterisks, NO prefixes.
 
@@ -253,9 +207,6 @@ REWRITTEN (plain text only):`;
             .trim(); // Ensure no leading/trailing whitespace
     }
 
-    /**
-     * Generate an expert opinion for the tweet lead
-     */
     async generateOpinion(summary: string): Promise<string> {
         const prompt = `Act as an expert news analyst. Read this news summary and provide a brief, insightful, 1-sentence opinion or takeaway (max 100 chars).
 It should be punchy, engaging, and professional.
@@ -273,14 +224,15 @@ OPINION:`;
             .trim();
     }
 
-    /**
-     * Generate a contextual AI image generation prompt
-     */
     async generateImagePrompt(summary: string, category: string = 'news'): Promise<string> {
+        // Add randomness for varied images
+        const styles = ['cinematic', 'dramatic', 'artistic', 'photorealistic', 'atmospheric', 'vibrant'][Math.floor(Math.random() * 6)];
+
         const prompt = `Create a short AI image generation prompt (max 100 chars) for this ${category} news.
-The image should be: dramatic, high-quality, professional style.
+The image should be: ${styles}, high-quality, professional style.
 Focus on: key action, thematic atmosphere, or iconic representation of ${category}.
 NO text in image. NO specific real people faces (copyright).
+Be CREATIVE - suggest a unique visual angle.
 
 News: "${summary.slice(0, 250)}"
 
@@ -294,7 +246,6 @@ PROMPT:`;
                 .trim()
                 .slice(0, 150);
 
-            // Default fallbacks based on category
             const fallbacks: Record<string, string> = {
                 'cricket': 'Cricket stadium action, professional sports photography',
                 'football': 'Football match highlight, dramatic sports shot',
@@ -309,15 +260,11 @@ PROMPT:`;
         }
     }
 
-    // Alias for backward compatibility
     async generateCricketImagePrompt(summary: string): Promise<string> {
         return this.generateImagePrompt(summary, 'cricket');
     }
 
 
-    /**
-     * Generate headline
-     */
     async generateHeadline(summaries: Map<string, string>): Promise<string> {
         const text = Array.from(summaries.values()).slice(0, 2).join('; ').slice(0, 150);
 
@@ -328,9 +275,6 @@ PROMPT:`;
         return result.trim().slice(0, 50);
     }
 
-    /**
-     * Check virality
-     */
     async checkVirality(tweet: string): Promise<{
         score: number;
         isViral: boolean;
@@ -357,17 +301,12 @@ PROMPT:`;
         return { score: 7, isViral: true, suggestions: [] };
     }
 
-    /**
-     * Enhance for virality
-     */
-    /**
-     * Enhance for virality
-     */
     async enhanceVirality(tweet: string, suggestions: string[]): Promise<string> {
         const prompt = `Rewrite this tweet to be more viral(max 270 chars).
 Include a question to engage users.
             Add 2 relevant hashtags.
 OUTPUT ONLY THE TWEET TEXT.NO META COMMENTS.
+DO NOT add UPDATE, BREAKING, or any label at the start.
 
             Original: "${tweet.slice(0, 150)}"
         Suggestions: ${suggestions.slice(0, 2).join(', ')}
@@ -377,24 +316,21 @@ VIRAL TWEET: `;
         const result = await this.generate(prompt);
         return result
             .replace(/^["']|["']$/g, '')
-            .replace(/^(Viral|Tweet|Rewrite|Here|Output)[:\s]*/gi, '')
+            .replace(/^(Viral|Tweet|Rewrite|Here|Output|UPDATE|BREAKING|Breaking|Update)[:\s]*/gi, '')
+            .replace(/📢\s*UPDATE\s*/gi, '') // Remove 📢 UPDATE
+            .replace(/🚨\s*(BREAKING|UPDATE)\s*/gi, '') // Remove 🚨 BREAKING/UPDATE
             .replace(/\(.*chars.*\)/gi, '') // Remove (280 chars) notes
             .trim();
     }
 
 
 
-    /**
- * Evaluate urgency/importance of current headlines to adjust tweet frequency
- * Works for any category (Cricket, Football, Tech, etc.)
- */
     async evaluateContentUrgency(headlines: string[], category: string = 'news'): Promise<{
         importance: 'LIVE' | 'HIGH' | 'NORMAL';
         suggestedInterval: number;
         reason: string;
         isLiveEvent: boolean;
     }> {
-        // Broad event keywords
         const liveKeywords = [
             'live', 'playing', 'underway', 'score', 'results', 'updates',
             'ongoing', 'breaking', 'happening now', 'just in', 'live coverage'
@@ -407,11 +343,9 @@ VIRAL TWEET: `;
 
         const headlinesText = headlines.join(' ').toLowerCase();
 
-        // Quick keyword check first
         const hasLiveKeyword = liveKeywords.some(kw => headlinesText.includes(kw));
         const hasMajorEvent = majorEventKeywords.some(kw => headlinesText.includes(kw));
 
-        // If obvious live major event, return immediately
         if (hasLiveKeyword && hasMajorEvent) {
             log.info(`⚡🔴 LIVE ${category.toUpperCase()} EVENT DETECTED!`);
             return {
@@ -422,7 +356,6 @@ VIRAL TWEET: `;
             };
         }
 
-        // Use AI to determine urgency
         const prompt = `Analyze these ${category} headlines. Is there a MAJOR event currently LIVE or very HIGH URGENCY breaking news?
 
 Headlines: "${headlinesText.slice(0, 400)}"
@@ -470,12 +403,10 @@ Respond in JSON ONLY:
         };
     }
 
-    // Alias for backward compatibility
     async evaluateMatchImportance(headlines: string[]): Promise<any> {
         return this.evaluateContentUrgency(headlines, 'cricket');
     }
 
-    // 🛡️ Content Moderation - Check if topic is appropriate
     async moderateContent(topic: string): Promise<{ isSafe: boolean; reason: string }> {
         const prompt = `You are a content moderator. Check if this topic is appropriate for a professional Twitter/X news account.
 
@@ -506,29 +437,46 @@ Respond ONLY in this JSON format:
         return { isSafe: true, reason: 'Moderation check passed' };
     }
 
-    // 🎯 Generate tweet for custom topic (non-news)
     async generateCustomTopicTweet(topic: string, maxChars: number = 200): Promise<string> {
-        const prompt = `Generate an engaging, informative tweet about this topic.
+        // Add randomness seed for variety
+        const randomAngle = ['fascinating fact', 'surprising insight', 'historical perspective',
+            'modern relevance', 'little-known detail', 'interesting comparison'][Math.floor(Math.random() * 6)];
+
+        const prompt = `Generate a UNIQUE tweet about this topic.
 
 Topic: "${topic}"
 
-Rules:
-- Maximum ${maxChars} characters
-- Professional and engaging tone
-- Include interesting facts or insights
-- No hashtags (will be added later)
-- No emojis at start
-- Sound natural, not robotic
+Focus on: ${randomAngle}
 
-Tweet:`;
+STRICT RULES:
+- Maximum ${maxChars} characters
+- MUST end with complete sentence and period (.)
+- Be creative and unique each time
+
+DO NOT INCLUDE:
+- Character count like "(199 characters)"
+- Labels like "UPDATE:", "BREAKING:", "Tweet:"
+- Hashtags
+- Emojis at start
+- Any meta commentary
+
+OUTPUT: Just the tweet text, nothing else.`;
 
         try {
             const response = await this.generate(prompt);
-            const tweet = response
+            let tweet = response
                 .replace(/^["']|["']$/g, '')
                 .replace(/\n/g, ' ')
-                .trim()
-                .slice(0, maxChars);
+                .replace(/^(UPDATE|BREAKING|Breaking|Update)[:\s]*/gi, '')
+                .replace(/📢\s*UPDATE\s*/gi, '')
+                .replace(/\(\d+\s*characters?\)/gi, '') // Remove "(199 characters)" type text
+                .replace(/\s+/g, ' ') // Normalize spaces
+                .trim();
+
+            // Ensure tweet ends with complete sentence
+            if (tweet.length > maxChars) {
+                tweet = this.ensureCompleteSentence(tweet, maxChars);
+            }
 
             log.info('✅ Custom topic tweet generated', { topic: topic.slice(0, 30) });
             return tweet;
@@ -536,6 +484,30 @@ Tweet:`;
             log.error('Custom topic generation failed');
             return `Interesting thoughts on ${topic}...`;
         }
+    }
+
+    private ensureCompleteSentence(text: string, maxLen: number): string {
+        if (text.length <= maxLen) return text;
+
+        const truncated = text.slice(0, maxLen);
+        // Find last sentence-ending punctuation
+        const lastPeriod = truncated.lastIndexOf('.');
+        const lastExclaim = truncated.lastIndexOf('!');
+        const lastQuestion = truncated.lastIndexOf('?');
+
+        const lastEnd = Math.max(lastPeriod, lastExclaim, lastQuestion);
+
+        if (lastEnd > maxLen * 0.5) {
+            return truncated.slice(0, lastEnd + 1).trim();
+        }
+
+        // Fallback: add period at last space
+        const lastSpace = truncated.lastIndexOf(' ');
+        if (lastSpace > maxLen * 0.6) {
+            return truncated.slice(0, lastSpace).trim() + '.';
+        }
+
+        return truncated.trim() + '.';
     }
 
     // Get stats

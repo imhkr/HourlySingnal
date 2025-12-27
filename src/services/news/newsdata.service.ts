@@ -3,11 +3,6 @@ import config from '../../config';
 import { NewsArticle, NewsCategory, INewsFetcher } from '../../types';
 import { log } from '../../utils/logger';
 
-/**
- * NewsData.io API Service
- * Primary news source for Indian and International news
- * Free tier: 200 requests/day
- */
 export class NewsDataService implements INewsFetcher {
     private client: AxiosInstance;
     private baseUrl = 'https://newsdata.io/api/1';
@@ -22,9 +17,6 @@ export class NewsDataService implements INewsFetcher {
         });
     }
 
-    /**
-     * Fetch news articles from NewsData.io
-     */
     async fetchNews(category: NewsCategory, limit: number = 5): Promise<NewsArticle[]> {
         let attempts = 0;
 
@@ -82,9 +74,6 @@ export class NewsDataService implements INewsFetcher {
         return [];
     }
 
-    /**
-     * Build query parameters based on category
-     */
     private buildParams(category: NewsCategory): Record<string, string> {
         switch (category) {
             case 'indian-news':
@@ -123,7 +112,6 @@ export class NewsDataService implements INewsFetcher {
                 };
 
             case 'cricket':
-                // Simple query to avoid 422 error
                 return {
                     language: 'en',
                     q: 'cricket',
@@ -160,9 +148,6 @@ export class NewsDataService implements INewsFetcher {
         }
     }
 
-    /**
-     * Transform API response to NewsArticle format
-     */
     private transformArticles(results: any[], category: NewsCategory): NewsArticle[] {
         const cutoff = Date.now() - 24 * 60 * 60 * 1000;
 

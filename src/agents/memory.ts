@@ -3,10 +3,6 @@ import { log } from '../utils/logger';
 import fs from 'fs';
 import path from 'path';
 
-/**
- * Memory Manager
- * Stores past reflections to help improve future summaries
- */
 export class MemoryManager {
     private memories: ReflexionMemory[] = [];
     private readonly maxMemories = 100;
@@ -17,9 +13,6 @@ export class MemoryManager {
         this.loadMemories();
     }
 
-    /**
-     * Store a new reflection
-     */
     store(memory: Omit<ReflexionMemory, 'timestamp'>): void {
         const newMemory: ReflexionMemory = {
             ...memory,
@@ -28,7 +21,7 @@ export class MemoryManager {
 
         this.memories.unshift(newMemory);
 
-        // Keep only the most recent memories
+
         if (this.memories.length > this.maxMemories) {
             this.memories = this.memories.slice(0, this.maxMemories);
         }
@@ -41,9 +34,6 @@ export class MemoryManager {
         this.saveMemories();
     }
 
-    /**
-     * Get recent feedback for a category
-     */
     getRecent(category?: NewsCategory, limit: number = 5): string[] {
         let filtered = this.memories;
 
@@ -56,9 +46,6 @@ export class MemoryManager {
             .map(m => m.feedback);
     }
 
-    /**
-     * Get improvement statistics
-     */
     getStats(): {
         totalReflexions: number;
         averageImprovement: number;
@@ -81,18 +68,12 @@ export class MemoryManager {
         };
     }
 
-    /**
-     * Clear all memories
-     */
     clear(): void {
         this.memories = [];
         this.saveMemories();
         log.info('Memory cleared');
     }
 
-    /**
-     * Load memories from disk
-     */
     private loadMemories(): void {
         try {
             if (fs.existsSync(this.memoryFile)) {
@@ -106,9 +87,6 @@ export class MemoryManager {
         }
     }
 
-    /**
-     * Save memories to disk
-     */
     private saveMemories(): void {
         try {
             const dir = path.dirname(this.memoryFile);
@@ -122,6 +100,5 @@ export class MemoryManager {
     }
 }
 
-// Singleton instance
 export const memory = new MemoryManager();
 export default memory;

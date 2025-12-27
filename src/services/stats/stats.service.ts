@@ -9,10 +9,7 @@ interface TweetStats {
     resetTime?: number;
 }
 
-/**
- * 📊 StatsService
- * Persists tweet counts and Twitter API quota info across bot restarts
- */
+// Persists tweet counts and Twitter API quota info across bot restarts
 class StatsService {
     private readonly statsPath: string;
     private stats: TweetStats;

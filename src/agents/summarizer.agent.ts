@@ -2,9 +2,6 @@ import { NewsArticle, NewsCategory, NewsSummary, EvaluationResult } from '../typ
 import { getBeastMode, BeastModeAI } from '../services/ai/beast-mode.service';
 import { log } from '../utils/logger';
 
-/**
- * Summarizer Agent - Uses Beast Mode AI
- */
 export class SummarizerAgent {
     private ai: BeastModeAI;
 
@@ -58,9 +55,6 @@ export class SummarizerAgent {
     }
 }
 
-/**
- * Evaluator Agent - Uses Beast Mode AI
- */
 export class EvaluatorAgent {
     private ai: BeastModeAI;
 
@@ -93,9 +87,6 @@ export class EvaluatorAgent {
     }
 }
 
-/**
- * Refiner Agent - Uses Beast Mode AI
- */
 export class RefinerAgent {
     private ai: BeastModeAI;
 
@@ -138,9 +129,6 @@ Better summary (max 180 chars):`;
     }
 }
 
-/**
- * Headline Agent - Uses Beast Mode AI
- */
 export class HeadlineAgent {
     private ai: BeastModeAI;
 

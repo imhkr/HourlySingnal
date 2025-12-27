@@ -3,27 +3,19 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { log } from '../../utils/logger';
 
-/**
- * 🖼️ Pollinations.ai Image Generation Service - FREE & DYNAMIC
- */
 export class ImageService {
     private readonly baseUrl = 'https://image.pollinations.ai/prompt';
     private readonly tempDir: string;
 
     constructor() {
-        // Create temp directory for images
         this.tempDir = path.join(process.cwd(), 'temp');
         if (!fs.existsSync(this.tempDir)) {
             fs.mkdirSync(this.tempDir, { recursive: true });
         }
     }
 
-    /**
-     * Generate an AI image from prompt
-     */
     async generateImage(prompt: string, category: string = 'news'): Promise<string | null> {
         try {
-            // Enhance prompt based on category
             let enhancement = 'professional journalism, high quality, 4k, modern media aesthetic';
 
             const isSports = ['cricket', 'football', 'sports', 'tennis', 'nba'].some(s => category.toLowerCase().includes(s));
@@ -34,18 +26,15 @@ export class ImageService {
             const enhancedPrompt = `${prompt}, ${enhancement}`;
             const encodedPrompt = encodeURIComponent(enhancedPrompt);
 
-            // Pollinations.ai generates image directly from URL
             const imageUrl = `${this.baseUrl}/${encodedPrompt}?width=1200&height=675&nologo=true`;
 
             log.info(`🖼️ Generating AI image for [${category}]...`);
 
-            // Download the image
             const response = await axios.get(imageUrl, {
                 responseType: 'arraybuffer',
                 timeout: 60000,
             });
 
-            // Save to temp file
             const filename = `img_${Date.now()}.jpg`;
             const filepath = path.join(this.tempDir, filename);
 
@@ -59,42 +48,40 @@ export class ImageService {
         }
     }
 
-    // Generates contextual image based on content - fully dynamic
     async generateNewsImage(content: string): Promise<string | null> {
         const lowerContent = content.toLowerCase();
 
-        let prompt = 'news update, professional journalism, modern media';
+        const moods = ['dramatic', 'cinematic', 'atmospheric', 'majestic', 'epic', 'stunning'][Math.floor(Math.random() * 6)];
+        const times = ['golden hour', 'sunset', 'sunrise', 'dusk', 'dawn', 'twilight'][Math.floor(Math.random() * 6)];
+        const angles = ['wide angle', 'aerial view', 'close-up detail', 'panoramic', 'ground level', 'bird eye view'][Math.floor(Math.random() * 6)];
+
+        let prompt = `news update, professional journalism, modern media, ${moods}, ${times}`;
         let category = 'news';
 
-        // Detect content and generate appropriate image
         if (lowerContent.includes('cricket') || lowerContent.includes('ipl') || lowerContent.includes('ashes')) {
-            prompt = 'Cricket stadium action, dramatic sports photography';
+            prompt = `Cricket stadium action, ${moods} sports photography, ${times} lighting`;
             category = 'cricket';
         } else if (lowerContent.includes('football') || lowerContent.includes('soccer') || lowerContent.includes('goal')) {
-            prompt = 'Football match action, stadium crowd, sports moment';
+            prompt = `Football match action, ${moods} stadium scene, ${times}`;
             category = 'football';
         } else if (lowerContent.includes('tech') || lowerContent.includes('ai') || lowerContent.includes('software')) {
-            prompt = 'Technology futuristic, digital innovation, modern aesthetic';
+            prompt = `Technology futuristic, ${moods} digital innovation, ${angles}`;
             category = 'technology';
         } else if (lowerContent.includes('business') || lowerContent.includes('stock') || lowerContent.includes('market')) {
-            prompt = 'Business finance, professional corporate setting';
+            prompt = `Business finance, ${moods} corporate setting, ${times}`;
             category = 'finance';
-        } else if (lowerContent.includes('roman') || lowerContent.includes('history') || lowerContent.includes('ancient')) {
-            prompt = 'Ancient historical architecture, dramatic lighting, epic landscape';
+        } else if (lowerContent.includes('roman') || lowerContent.includes('history') || lowerContent.includes('ancient') || lowerContent.includes('empire')) {
+            prompt = `Ancient Roman ruins, ${moods} historical architecture, ${times}, ${angles}, epic landscape`;
             category = 'history';
         }
 
         return this.generateImage(prompt, category);
     }
 
-    // Alias for backward compatibility
     async generateCricketImage(content: string): Promise<string | null> {
         return this.generateNewsImage(content);
     }
 
-    /**
-     * Clean up old temp images
-     */
     cleanup(): void {
         try {
             if (!fs.existsSync(this.tempDir)) return;

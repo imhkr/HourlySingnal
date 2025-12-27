@@ -6,7 +6,6 @@ import { FetcherAgent } from '../agents/fetcher.agent';
 import { getSheetConfig } from '../services/config/sheets.service';
 import statsService from '../services/stats/stats.service';
 
-// Smart Scheduler with Google Sheets Remote Control
 export class Scheduler {
     private pipeline: Pipeline;
     private fetcher: FetcherAgent;
@@ -34,11 +33,9 @@ export class Scheduler {
     private async scheduleNext(): Promise<void> {
         if (!this.isRunning) return;
 
-        // Fetch config from Google Sheets
         const sheetConfig = await getSheetConfig().getConfig();
         const stats = statsService.getStats();
 
-        // Log sheet config & stats
         log.info('📊 BOT STATUS:', {
             activeCategory: sheetConfig.activeCategory,
             tweetsToday: stats.tweetsToday,
@@ -46,15 +43,12 @@ export class Scheduler {
             isActive: sheetConfig.isActive,
         });
 
-        // Check if bot is disabled from sheet
         if (!sheetConfig.isActive) {
             log.warn('⏸️ Bot is PAUSED (isActive=false in Google Sheet)');
-            // Check again in 5 minutes
             this.intervalId = setTimeout(() => this.scheduleNext(), 5 * 60 * 1000);
             return;
         }
 
-        // Use maxDailyTweets from sheet vs persistent stats
         const maxDaily = sheetConfig.maxDailyTweets || 17;
         const currentSent = stats.tweetsToday;
 
@@ -65,10 +59,8 @@ export class Scheduler {
             return;
         }
 
-        // Get interval from sheet (default from AI match detection if news mode)
         let interval = sheetConfig.tweetInterval || config.app.tweetIntervalMinutes;
 
-        // Only do AI match detection for news mode
         if (sheetConfig.isNewsTweet) {
             try {
                 const articles = await this.fetcher.fetch(sheetConfig.activeCategory, 5);
@@ -112,9 +104,7 @@ export class Scheduler {
         this.intervalId = setTimeout(() => this.scheduleNext(), nextRunMs);
     }
 
-    /**
-     * Stop the scheduler
-     */
+    // Kills the active loop
     stop(): void {
         if (this.intervalId) {
             clearTimeout(this.intervalId);
@@ -124,17 +114,13 @@ export class Scheduler {
         log.info('🛑 Scheduler stopped');
     }
 
-    /**
-     * Run pipeline once manually
-     */
+    // Forces a one-time execution
     async runOnce(opinion?: string): Promise<void> {
         log.info('▶️ Manual run triggered');
         await this.runPipeline(opinion);
     }
 
-    /**
-     * Run pipeline with error handling
-     */
+    // Internal wrapper with logging
     private async runPipeline(opinion?: string): Promise<void> {
         try {
             const result = await this.pipeline.run(opinion);
@@ -151,9 +137,7 @@ export class Scheduler {
         }
     }
 
-    /**
-     * Get scheduler status
-     */
+    // Returns the current state for the CLI
     getStatus(): {
         running: boolean;
         mode: string;

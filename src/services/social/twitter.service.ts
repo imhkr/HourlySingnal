@@ -5,17 +5,11 @@ import { log } from '../../utils/logger';
 import { MegaTweet } from '../../types';
 import statsService from '../stats/stats.service';
 
-/**
- * Twitter/X API Service
- * Handles posting tweets and threads with media support
- * Free tier: 17 tweets/day
- */
 export class TwitterService {
     private client: TwitterApi;
     private readonly MAX_TWEET_LENGTH = 280;
 
     constructor() {
-        // ... (constructor logic remains same, just ensuring imports are correct)
         this.client = new TwitterApi({
             appKey: config.twitter.apiKey,
             appSecret: config.twitter.apiSecret,
@@ -24,9 +18,6 @@ export class TwitterService {
         });
     }
 
-    /**
-     * Post a single tweet
-     */
     async postTweet(text: string): Promise<{ success: boolean; tweetId?: string; error?: string }> {
         try {
             if (text.length > this.MAX_TWEET_LENGTH) {
@@ -38,7 +29,6 @@ export class TwitterService {
 
             const tweet = await this.client.v2.tweet(text.slice(0, this.MAX_TWEET_LENGTH));
 
-            // Sync quota from headers
             const rateLimit = (tweet as any).rateLimit;
             if (rateLimit) {
                 statsService.updateQuota(rateLimit.remaining, rateLimit.reset);
@@ -55,7 +45,6 @@ export class TwitterService {
                 tweetId: tweet.data.id
             };
         } catch (error: any) {
-            // Detailed error logging
             log.error('❌ Twitter API Error:', {
                 message: error.message,
                 code: error.code,
@@ -63,7 +52,6 @@ export class TwitterService {
                 rateLimit: error.rateLimit,
             });
 
-            // Update stats from error rate limit info if available
             if (error.rateLimit) {
                 statsService.updateQuota(error.rateLimit.remaining, error.rateLimit.reset);
 
@@ -80,11 +68,6 @@ export class TwitterService {
         }
     }
 
-    /**
-     * 🖼️ Post a tweet with an image
-     * @param text Tweet text
-     * @param imagePath Local path to image file
-     */
     async postTweetWithImage(text: string, imagePath: string): Promise<{ success: boolean; tweetId?: string; error?: string }> {
         try {
             if (!fs.existsSync(imagePath)) {
@@ -94,16 +77,13 @@ export class TwitterService {
 
             log.info('🖼️ Uploading image to Twitter...');
 
-            // Upload media using v1 API
             const mediaId = await this.client.v1.uploadMedia(imagePath);
             log.info('✅ Image uploaded', { mediaId });
 
-            // Post tweet with media
             const tweet = await this.client.v2.tweet(text.slice(0, this.MAX_TWEET_LENGTH), {
                 media: { media_ids: [mediaId] }
             });
 
-            // Sync quota from headers
             const rateLimit = (tweet as any).rateLimit;
             if (rateLimit) {
                 statsService.updateQuota(rateLimit.remaining, rateLimit.reset);
@@ -130,29 +110,22 @@ export class TwitterService {
                 statsService.updateQuota(error.rateLimit.remaining, error.rateLimit.reset);
             }
 
-            // Fallback to text-only tweet
             log.warn('Falling back to text-only tweet...');
             return this.postTweet(text);
         }
     }
 
 
-    /**
-     * Post a thread with LONG cooldowns between tweets
-     * VM-ready: handles rate limits automatically
-     */
     async postThread(tweets: string[]): Promise<{ success: boolean; tweetIds: string[]; error?: string }> {
         const tweetIds: string[] = [];
         let lastTweetId: string | undefined;
 
-        // 60 second (1 minute) cooldown between tweets in a thread
         const THREAD_COOLDOWN = 60000;
 
         try {
             for (let i = 0; i < tweets.length; i++) {
                 const tweetText = tweets[i].slice(0, this.MAX_TWEET_LENGTH);
 
-                // Retry logic for rate limits
                 let posted = false;
                 let retries = 0;
                 const maxRetries = 3;
@@ -178,13 +151,11 @@ export class TwitterService {
                     } catch (err: any) {
                         retries++;
 
-                        // 403/429 = rate limit, wait and retry
                         if (err.code === 403 || err.code === 429) {
                             const waitTime = retries * 60000;  // 1min, 2min, 3min
                             log.warn(`Rate limited, waiting ${waitTime / 1000}s before retry ${retries}/${maxRetries}`);
                             await this.delay(waitTime);
                         } else {
-                            // Other error - give up on this tweet
                             log.error(`Tweet ${i + 1} failed`, { error: err.message });
                             if (tweetIds.length > 0) {
                                 return { success: true, tweetIds, error: `Partial: ${err.message}` };
@@ -194,7 +165,6 @@ export class TwitterService {
                     }
                 }
 
-                // Long cooldown between thread tweets (30 seconds)
                 if (i < tweets.length - 1 && posted) {
                     log.info(`⏳ Waiting ${THREAD_COOLDOWN / 1000}s before next tweet...`);
                     await this.delay(THREAD_COOLDOWN);
@@ -213,9 +183,6 @@ export class TwitterService {
         }
     }
 
-    /**
-     * Post a mega tweet (auto-converts to thread if too long)
-     */
     async postMegaTweet(megaTweet: MegaTweet): Promise<{ success: boolean; tweetIds: string[] }> {
         if (megaTweet.isThread) {
             return this.postThread(megaTweet.tweets);
@@ -228,16 +195,10 @@ export class TwitterService {
         }
     }
 
-    /**
-     * Helper to add delay
-     */
     private delay(ms: number): Promise<void> {
         return new Promise(resolve => setTimeout(resolve, ms));
     }
 
-    /**
-     * Verify credentials are valid
-     */
     async verifyCredentials(): Promise<boolean> {
         try {
             const me = await this.client.v2.me();

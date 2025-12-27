@@ -5,6 +5,7 @@ import { NewsCategory } from '../../types';
 // Bot config from Google Sheets
 export interface SheetConfig {
     activeCategory: NewsCategory;
+    activeCategories: NewsCategory[];
     botName: string;
     botEmoji: string;
     hashtags: string[];
@@ -18,6 +19,7 @@ export interface SheetConfig {
 // Default config if sheet fetch fails
 const DEFAULT_CONFIG: SheetConfig = {
     activeCategory: 'cricket',
+    activeCategories: ['cricket'],
     botName: 'HourlySignal',
     botEmoji: '📰',
     hashtags: ['#News', '#Breaking'],
@@ -28,15 +30,7 @@ const DEFAULT_CONFIG: SheetConfig = {
     customTopic: '',
 };
 
-/**
- * Google Sheets Config Service
- * 
- * How to setup:
- * 1. Create a Google Sheet with columns: key, value
- * 2. Add rows: activeCategory, botName, botEmoji, hashtags, tweetInterval, isActive
- * 3. File → Share → Publish to web → CSV
- * 4. Copy the CSV URL and set GOOGLE_SHEET_URL in .env
- */
+// Connects to a public Google Sheet CSV for remote control
 export class GoogleSheetsConfig {
     private sheetUrl: string;
     private cachedConfig: SheetConfig | null = null;
@@ -47,13 +41,8 @@ export class GoogleSheetsConfig {
         this.sheetUrl = process.env.GOOGLE_SHEET_URL || '';
     }
 
-    // Fetches config from Google Sheet
+    // Fetches config from Google Sheet - NO CACHING for real-time updates
     async getConfig(): Promise<SheetConfig> {
-        // Return cached if fresh
-        if (this.cachedConfig && Date.now() - this.lastFetch < this.CACHE_TTL) {
-            return this.cachedConfig;
-        }
-
         // If no sheet URL, use defaults
         if (!this.sheetUrl) {
             log.warn('No GOOGLE_SHEET_URL set, using default config');
@@ -63,7 +52,7 @@ export class GoogleSheetsConfig {
         try {
             log.info('📊 Fetching config from Google Sheets...');
 
-            const response = await axios.get(this.sheetUrl, { timeout: 10000 });
+            const response = await axios.get(this.sheetUrl, { timeout: 30000 });
             const csvData = response.data as string;
 
             // Parse CSV (key,value format)
@@ -84,7 +73,6 @@ export class GoogleSheetsConfig {
         }
     }
 
-    // Parse CSV to config object
     private parseCSV(csv: string): SheetConfig {
         const lines = csv.trim().split('\n');
         const config: Record<string, string> = {};
@@ -96,33 +84,35 @@ export class GoogleSheetsConfig {
             }
         }
 
+        const categories = (config['activeCategory'] || 'cricket').split(',').map(c => c.trim() as NewsCategory);
+
+        const maxDailyTweetsValue = parseInt(config['maxDailyTweets'] || '17', 10);
+
         return {
-            activeCategory: (config['activeCategory'] || 'cricket') as NewsCategory,
+            activeCategory: categories[0],
+            activeCategories: categories,
             botName: config['botName'] || 'HourlySignal',
             botEmoji: config['botEmoji'] || '📰',
             hashtags: (config['hashtags'] || '#News,#Breaking').split(',').map(h => h.trim()),
             tweetInterval: parseInt(config['tweetInterval'] || '85', 10),
-            maxDailyTweets: parseInt(config['maxDailyTweets'] || '17', 10),
+            maxDailyTweets: maxDailyTweetsValue,
             isActive: config['isActive']?.toLowerCase() !== 'false',
             isNewsTweet: config['isNewsTweet']?.toLowerCase() !== 'false',
             customTopic: config['customTopic'] || '',
         };
     }
 
-    // Check if bot is active
     async isActive(): Promise<boolean> {
         const config = await this.getConfig();
         return config.isActive;
     }
 
-    // Clear cache to force refresh
     clearCache(): void {
         this.cachedConfig = null;
         this.lastFetch = 0;
     }
 }
 
-// Singleton
 let instance: GoogleSheetsConfig | null = null;
 
 export function getSheetConfig(): GoogleSheetsConfig {
