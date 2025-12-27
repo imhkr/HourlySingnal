@@ -27,10 +27,19 @@ export class FetcherAgent {
             log.warn('AI query optimization failed, using raw category');
         }
 
-        const [newsDataArticles, gNewsArticles] = await Promise.all([
+        let [newsDataArticles, gNewsArticles] = await Promise.all([
             this.newsDataService.fetchNews(category, limit, optimizedQuery),
             this.gNewsService.fetchNews(category, limit, optimizedQuery),
         ]);
+
+        // Failover: If optimized query returned 0 from BOTH, retry with raw category
+        if (newsDataArticles.length === 0 && gNewsArticles.length === 0 && optimizedQuery) {
+            log.warn(`[NEWS] Optimized query "${optimizedQuery}" returned nothing. Retrying with raw category "${category}"...`);
+            [newsDataArticles, gNewsArticles] = await Promise.all([
+                this.newsDataService.fetchNews(category, limit),
+                this.gNewsService.fetchNews(category, limit),
+            ]);
+        }
 
         log.news('Fetched from sources', category, {
             newsData: newsDataArticles.length,

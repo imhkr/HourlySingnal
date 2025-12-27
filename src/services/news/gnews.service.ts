@@ -206,7 +206,7 @@ export class GNewsService implements INewsFetcher {
     }
 
     private transformArticles(articles: any[], category: NewsCategory): NewsArticle[] {
-        const cutoff = Date.now() - 20 * 60 * 60 * 1000; // Max 20 hours old
+        const cutoff = Date.now() - 24 * 60 * 60 * 1000; // Max 24 hours old
 
         const mapped = articles
             .map((article: any) => {
@@ -230,7 +230,7 @@ export class GNewsService implements INewsFetcher {
         if (mapped.length > 0 && fresh.length === 0) {
             const freshest = Math.max(...mapped.map(a => a.publishedAt.getTime()));
             const hoursOld = ((Date.now() - freshest) / (1000 * 60 * 60)).toFixed(1);
-            log.warn(`⚠️ All GNews articles for ${category} are stale. Freshest is ${hoursOld}h old (Max: 20h).`);
+            log.warn(`⚠️ All GNews articles for ${category} are stale. Freshest is ${hoursOld}h old (Max: 24h).`);
         }
 
         return fresh;
