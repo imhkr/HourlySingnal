@@ -65,7 +65,10 @@ Bot fetches latest news, summarizes with AI, and tweets.
 
 > [!NOTE]  
 > **News Freshness & API Plans**:  
-> Most news APIs (GNews, NewsData) have a **12 to 24-hour delay** on their Free plans for search results. The bot is optimized to handle this by using a 20-hour freshness window by default. For true real-time/instant news (less than 1 hour delay), a **Paid API Plan** is recommended.
+> Most news APIs (GNews, NewsData) have a **12 to 24-hour delay** on their Free plans for search results. The bot is optimized to handle this by using a 20 to 24-hour freshness window by default. For true real-time/instant news (less than 1 hour delay), a **Paid API Plan** is recommended.  
+>   
+> **Data Quality & Accuracy**:  
+> The precision and relevance of the generated tweets are directly dependent on the data quality provided by the News APIs. High-quality API data results in high-quality, accurate tweets.
 
 ### Mode 2: Custom Topic Mode
 ```
