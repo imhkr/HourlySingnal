@@ -3,15 +3,9 @@ import config from '../config';
 import { log } from '../utils/logger';
 import { getBeastMode } from '../services/ai/beast-mode.service';
 import { FetcherAgent } from '../agents/fetcher.agent';
+import { getSheetConfig } from '../services/config/sheets.service';
 
-/**
- * 🏏 Smart Scheduler with AI Match Detection
- * 
- * Features:
- * - Normal Mode: 1 tweet every 85 mins
- * - Live Match Mode: Tweet every 20 mins when major match detected
- * - AI evaluates match importance from headlines
- */
+// Smart Scheduler with Google Sheets Remote Control
 export class Scheduler {
     private pipeline: Pipeline;
     private fetcher: FetcherAgent;
@@ -20,37 +14,47 @@ export class Scheduler {
     private currentMode: 'NORMAL' | 'LIVE' | 'HIGH' = 'NORMAL';
     private tweetsToday: number = 0;
     private lastResetDate: string = new Date().toDateString();
-    private readonly MAX_DAILY_TWEETS = 17;
 
     constructor() {
         this.pipeline = new Pipeline();
         this.fetcher = new FetcherAgent();
     }
 
-    /**
-     * Start the smart scheduler
-     */
     start(): void {
         if (this.isRunning) {
             log.warn('Scheduler already running');
             return;
         }
 
-        log.info('⏰ Starting SMART scheduler with AI match detection');
-        log.info(`📊 Default interval: ${config.app.tweetIntervalMinutes} minutes`);
-        log.info(`🏏 Live match mode: 20 minute intervals`);
-
+        log.info('⏰ Starting SMART scheduler with Google Sheets control');
         this.isRunning = true;
         this.scheduleNext();
-
         log.info('✅ Smart scheduler started successfully');
     }
 
-    /**
-     * Schedule the next check with dynamic interval
-     */
     private async scheduleNext(): Promise<void> {
         if (!this.isRunning) return;
+
+        // Fetch config from Google Sheets
+        const sheetConfig = await getSheetConfig().getConfig();
+
+        // Log sheet config
+        log.info('📊 SHEET CONFIG:', {
+            activeCategory: sheetConfig.activeCategory,
+            tweetInterval: sheetConfig.tweetInterval,
+            maxDailyTweets: sheetConfig.maxDailyTweets,
+            isActive: sheetConfig.isActive,
+            isNewsTweet: sheetConfig.isNewsTweet,
+            customTopic: sheetConfig.customTopic,
+        });
+
+        // Check if bot is disabled from sheet
+        if (!sheetConfig.isActive) {
+            log.warn('⏸️ Bot is PAUSED (isActive=false in Google Sheet)');
+            // Check again in 5 minutes
+            this.intervalId = setTimeout(() => this.scheduleNext(), 5 * 60 * 1000);
+            return;
+        }
 
         // Reset daily counter at midnight
         const today = new Date().toDateString();
@@ -60,45 +64,54 @@ export class Scheduler {
             log.info('📅 Daily tweet counter reset');
         }
 
-        // Check if we've hit daily limit
-        if (this.tweetsToday >= this.MAX_DAILY_TWEETS) {
-            log.warn(`⚠️ Daily limit reached (${this.tweetsToday}/${this.MAX_DAILY_TWEETS}). Waiting for midnight reset.`);
-            // Wait 1 hour and check again
+        // Use maxDailyTweets from sheet
+        const maxDaily = sheetConfig.maxDailyTweets || 17;
+        if (this.tweetsToday >= maxDaily) {
+            log.warn(`⚠️ Daily limit reached (${this.tweetsToday}/${maxDaily}). Waiting for midnight reset.`);
             this.intervalId = setTimeout(() => this.scheduleNext(), 60 * 60 * 1000);
             return;
         }
 
-        // Evaluate match importance using AI
-        let interval = config.app.tweetIntervalMinutes;
-        try {
-            const articles = await this.fetcher.fetch('cricket', 5);
-            const headlines = articles.map(a => a.title);
+        // Get interval from sheet (default from AI match detection if news mode)
+        let interval = sheetConfig.tweetInterval || config.app.tweetIntervalMinutes;
 
-            if (headlines.length > 0) {
-                const ai = getBeastMode();
-                const evaluation = await ai.evaluateMatchImportance(headlines);
+        // Only do AI match detection for news mode
+        if (sheetConfig.isNewsTweet) {
+            try {
+                const articles = await this.fetcher.fetch(sheetConfig.activeCategory, 5);
+                const headlines = articles.map(a => a.title);
 
-                this.currentMode = evaluation.importance;
-                interval = evaluation.suggestedInterval;
+                if (headlines.length > 0) {
+                    const ai = getBeastMode();
+                    const evaluation = await ai.evaluateMatchImportance(headlines);
 
-                if (evaluation.isLiveMatch) {
-                    log.info(`🏏🔴 LIVE MODE: ${evaluation.reason}`);
-                    log.info(`⚡ Interval set to ${interval} mins for live coverage`);
-                } else {
-                    log.info(`📊 Mode: ${evaluation.importance} | Interval: ${interval} mins`);
+                    this.currentMode = evaluation.importance;
+                    // Use AI suggested interval only if it's shorter
+                    if (evaluation.suggestedInterval < interval) {
+                        interval = evaluation.suggestedInterval;
+                    }
+
+                    if (evaluation.isLiveMatch) {
+                        log.info(`🏏🔴 LIVE MODE: ${evaluation.reason}`);
+                        log.info(`⚡ Interval set to ${interval} mins for live coverage`);
+                    } else {
+                        log.info(`📊 Mode: ${evaluation.importance} | Interval: ${interval} mins`);
+                    }
                 }
+            } catch (err: any) {
+                log.warn('Could not evaluate match importance, using sheet interval');
             }
-        } catch (err: any) {
-            log.warn('Could not evaluate match importance, using default interval');
+        } else {
+            log.info(`🎯 Custom Topic Mode: "${sheetConfig.customTopic}"`);
         }
 
         // Run the pipeline
         await this.runPipeline();
         this.tweetsToday++;
 
-        log.info(`📊 Tweets today: ${this.tweetsToday}/${this.MAX_DAILY_TWEETS}`);
+        log.info(`📊 Tweets today: ${this.tweetsToday}/${maxDaily}`);
 
-        // Schedule next run
+        // Schedule next run using sheet interval
         const nextRunMs = interval * 60 * 1000;
         const nextRunTime = new Date(Date.now() + nextRunMs);
         log.info(`📅 Next run: ${nextRunTime.toLocaleTimeString('en-IN')} (${interval} mins)`);
@@ -158,7 +171,7 @@ export class Scheduler {
             running: this.isRunning,
             mode: this.currentMode,
             tweetsToday: this.tweetsToday,
-            maxDaily: this.MAX_DAILY_TWEETS,
+            maxDaily: 17, // Default, actual value comes from sheet
         };
     }
 }

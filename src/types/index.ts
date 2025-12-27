@@ -21,7 +21,8 @@ export type NewsCategory =
     | 'cricket'         // Dedicated worldwide cricket
     | 'technology'      // New: Tech news
     | 'indian-youtuber'
-    | 'international-youtuber';
+    | 'international-youtuber'
+    | 'custom';         // New: Custom topic mode
 
 // Category Display Names
 export const CategoryDisplayNames: Record<NewsCategory, string> = {
@@ -34,6 +35,7 @@ export const CategoryDisplayNames: Record<NewsCategory, string> = {
     'indian-youtuber': '🎬 YT India',
     'international-youtuber': '🎥 YT Global',
     'technology': '💻 Tech',
+    'custom': '✨ Custom',
 };
 
 // Category Emojis for tweets
@@ -47,6 +49,7 @@ export const CategoryEmojis: Record<NewsCategory, string> = {
     'indian-youtuber': '🎬',
     'international-youtuber': '🎥',
     'technology': '💻',
+    'custom': '✨',
 };
 
 // News Fetcher Interface

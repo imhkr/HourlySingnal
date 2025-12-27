@@ -34,6 +34,7 @@ export class TweetComposer {
     compose(
         headline: string,
         summaries: Map<NewsCategory, string>,
+        sheetConfig?: SheetConfig,
         opinion?: string
     ): MegaTweet {
         const timestamp = new Date();
@@ -45,23 +46,19 @@ export class TweetComposer {
             TweetComposer.lastResetDate = today;
         }
 
-        // Get all valid stories sorted by length (longer = more detailed = more viral)
+        // Get all valid stories sorted by length
         const stories = this.getSortedStories(summaries);
 
-        // Calculate how many tweets we can post (stay under 17/day)
-        const remainingTweets = 17 - TweetComposer.dailyTweetCount;
-        const canThread = remainingTweets >= 2 && stories.length >= 2;
+        // Calculate usage
+        const maxDaily = sheetConfig?.maxDailyTweets || 17;
+        const remainingTweets = maxDaily - TweetComposer.dailyTweetCount;
 
         let tweets: string[];
-        if (canThread) {
-            tweets = this.buildTweetWithConfig(stories);
-            TweetComposer.dailyTweetCount += tweets.length;
-        } else {
-            tweets = [this.buildMainTweet(headline, stories[0])];
-            TweetComposer.dailyTweetCount += 1;
-        }
+        // For now we use single tweet mode for better focus, but keeping logic for future
+        tweets = [this.buildTweetWithConfig(stories, sheetConfig)];
+        TweetComposer.dailyTweetCount += 1;
 
-        console.log(`📊 Daily tweets: ${TweetComposer.dailyTweetCount}/17 remaining: ${17 - TweetComposer.dailyTweetCount}`);
+        log.info(`📊 Daily Usage: ${TweetComposer.dailyTweetCount}/${maxDaily}`);
 
         return {
             headline,
@@ -86,12 +83,12 @@ export class TweetComposer {
             }
         }
 
-        // Sort by length (more detailed = more viral)
+        // Sort by length
         return stories.sort((a, b) => b.text.length - a.text.length);
     }
 
     /**
-     * Truncate at word boundary (don't cut words)
+     * Truncate at word boundary
      */
     private truncateAtWord(text: string, maxLen: number): string {
         if (text.length <= maxLen) return text;
@@ -100,38 +97,24 @@ export class TweetComposer {
         return lastSpace > maxLen * 0.6 ? truncated.slice(0, lastSpace) : truncated;
     }
 
-    /**
-     * Build MAIN tweet (most viral story)
-     */
-    private buildMainTweet(headline: string, story: { cat: NewsCategory; text: string } | undefined): string {
-        const catEmojis: Record<string, string> = {
-            'indian-news': '🇮🇳', 'international-news': '🌍',
-            'cricket': '🏏', 'football': '⚽',
-            'indian-sports': '🏆', 'international-sports': '🌐'
-        };
-
-        const emoji = story ? catEmojis[story.cat] || '📰' : '📰';
-        const text = this.truncateAtWord(story?.text || 'Top headlines today', 180);
-        const head = this.truncateAtWord(headline, 35);
-
-        return `${emoji} ${head}\n\n${text}\n\n#News #Breaking`;
-    }
-
-    // Builds tweet using Google Sheets config (or fallback to local config)
-    private buildTweetWithConfig(stories: { cat: NewsCategory; text: string }[], sheetConfig?: SheetConfig): string[] {
-        const tweets: string[] = [];
-
-        // Use Google Sheet config if available, else local config
+    // Builds tweet using Google Sheets config
+    private buildTweetWithConfig(stories: { cat: NewsCategory; text: string }[], sheetConfig?: SheetConfig): string {
+        // Use Google Sheet config if available
         const emoji = sheetConfig?.botEmoji || config.bot.botEmoji;
         const hashtags = sheetConfig?.hashtags?.join(' ') || config.bot.customHashtags.join(' ');
 
         const story1 = stories[0];
-        if (story1) {
-            const text1 = this.truncateAtWord(story1.text, 220);
-            tweets.push(`${emoji} NEWS UPDATE\n\n${text1}\n\n${hashtags}`);
+        if (!story1) return 'No updates at this time';
+
+        // Dynamic label based on category
+        let label = 'UPDATE';
+        if (story1.cat !== 'custom') {
+            const catLabel = story1.cat.replace(/-/g, ' ').toUpperCase();
+            label = `${catLabel} UPDATE`;
         }
 
-        return tweets;
+        const text1 = this.truncateAtWord(story1.text, 220);
+        return `${emoji} ${label}\n\n${text1}\n\n${hashtags}`;
     }
 }
 
@@ -222,7 +205,10 @@ export class Pipeline {
 
                 const emoji = sheetConfig.botEmoji || config.bot.botEmoji;
                 const hashtags = sheetConfig.hashtags?.join(' ') || config.bot.customHashtags.join(' ');
-                const fullTweet = `${emoji} ${customTweet}\n\n${hashtags}`;
+
+                // Dynamic label (not just cricket!)
+                const updateLabel = 'UPDATE';
+                const fullTweet = `${emoji} ${updateLabel}\n\n${customTweet}\n\n${hashtags}`;
 
                 // Generate image
                 const imagePath = await this.imageService.generateCricketImage(customTweet);
@@ -343,7 +329,7 @@ export class Pipeline {
                 }
 
                 // Step 3: Compose mega-tweet
-                let megaTweet = this.composer.compose(headline, summaries, opinion);
+                let megaTweet = this.composer.compose(headline, summaries, sheetConfig, opinion);
 
                 log.info('📝 Mega-tweet composed', {
                     isThread: megaTweet.isThread,
