@@ -40,6 +40,7 @@ Control everything from Google Sheets - **no code changes needed!**
 | isActive | true | Pause/resume bot |
 | isNewsTweet | true | true = News mode, false = Custom topic |
 | customTopic | | Your custom topic (when isNewsTweet = false) |
+| generateImage | true | true = AI images ON, false = OFF |
 
 ### Example Sheet
 👉 [View Example Sheet Format](https://docs.google.com/spreadsheets/d/1Qy39sXKkKamEht8T6CciaUBjLZisbH5cBknF8O7tgzI/edit?usp=sharing)
