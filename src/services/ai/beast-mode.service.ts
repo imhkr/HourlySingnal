@@ -274,16 +274,15 @@ OPINION:`;
     }
 
     /**
-     * Generate a cricket-themed image prompt for AI image generation
-     * Used for creating contextual images for cricket tweets
+     * Generate a contextual AI image generation prompt
      */
-    async generateCricketImagePrompt(summary: string): Promise<string> {
-        const prompt = `Create a short AI image generation prompt (max 100 chars) for this cricket news.
-The image should be: dramatic, high-quality, sports photography style.
-Focus on: cricket action, stadium atmosphere, or player celebration.
-NO text in image. NO specific player faces (copyright).
+    async generateImagePrompt(summary: string, category: string = 'news'): Promise<string> {
+        const prompt = `Create a short AI image generation prompt (max 100 chars) for this ${category} news.
+The image should be: dramatic, high-quality, professional style.
+Focus on: key action, thematic atmosphere, or iconic representation of ${category}.
+NO text in image. NO specific real people faces (copyright).
 
-News: "${summary.slice(0, 200)}"
+News: "${summary.slice(0, 250)}"
 
 PROMPT:`;
 
@@ -295,11 +294,24 @@ PROMPT:`;
                 .trim()
                 .slice(0, 150);
 
-            // Ensure it's a valid image prompt
-            return cleaned || 'Cricket stadium with dramatic lighting, action shot, professional sports photography';
+            // Default fallbacks based on category
+            const fallbacks: Record<string, string> = {
+                'cricket': 'Cricket stadium action, professional sports photography',
+                'football': 'Football match highlight, dramatic sports shot',
+                'technology': 'Digital innovation, futuristic technology aesthetic',
+                'finance': 'Professional financial setting, markets and trading',
+                'history': 'Epic historical architecture, dramatic lighting',
+            };
+
+            return cleaned || fallbacks[category.toLowerCase()] || 'Professional news journalism aesthetic, high quality';
         } catch {
-            return 'Cricket stadium with dramatic lighting, action shot, professional sports photography';
+            return 'Professional news journalism aesthetic, high quality';
         }
+    }
+
+    // Alias for backward compatibility
+    async generateCricketImagePrompt(summary: string): Promise<string> {
+        return this.generateImagePrompt(summary, 'cricket');
     }
 
 
@@ -373,29 +385,24 @@ VIRAL TWEET: `;
 
 
     /**
-     * 🏏 Evaluate if a major cricket match is live
-     * Used by scheduler to dynamically adjust tweet frequency
-     * 
-     * Returns:
-     * - importance: 'LIVE' | 'HIGH' | 'NORMAL'
-     * - suggestedInterval: minutes between tweets
-     * - reason: why this importance level
-     */
-    async evaluateMatchImportance(headlines: string[]): Promise<{
+ * Evaluate urgency/importance of current headlines to adjust tweet frequency
+ * Works for any category (Cricket, Football, Tech, etc.)
+ */
+    async evaluateContentUrgency(headlines: string[], category: string = 'news'): Promise<{
         importance: 'LIVE' | 'HIGH' | 'NORMAL';
         suggestedInterval: number;
         reason: string;
-        isLiveMatch: boolean;
+        isLiveEvent: boolean;
     }> {
-        // Major match keywords
+        // Broad event keywords
         const liveKeywords = [
-            'live', 'playing', 'batting', 'bowling', 'wicket', 'runs', 'overs',
-            'match underway', 'day 1', 'day 2', 'day 3', 'day 4', 'day 5'
+            'live', 'playing', 'underway', 'score', 'results', 'updates',
+            'ongoing', 'breaking', 'happening now', 'just in', 'live coverage'
         ];
         const majorEventKeywords = [
-            'world cup', 'ipl', 'ashes', 'bgt', 'border gavaskar', 'final',
-            'semi-final', 'semifinal', 'knockout', 'champions trophy',
-            't20 world cup', 'odi world cup', 'wtc final', 'ipl final'
+            'world cup', 'final', 'semi-final', 'championship', 'tournament',
+            'launch', 'election', 'emergency', 'summit', 'announcement',
+            'ipl', 'bgt', 'isl', 'premier league', 'unveiled'
         ];
 
         const headlinesText = headlines.join(' ').toLowerCase();
@@ -404,65 +411,68 @@ VIRAL TWEET: `;
         const hasLiveKeyword = liveKeywords.some(kw => headlinesText.includes(kw));
         const hasMajorEvent = majorEventKeywords.some(kw => headlinesText.includes(kw));
 
-        // If obvious live major match, return immediately
+        // If obvious live major event, return immediately
         if (hasLiveKeyword && hasMajorEvent) {
-            log.info('🏏🔴 LIVE MAJOR MATCH DETECTED!');
+            log.info(`⚡🔴 LIVE ${category.toUpperCase()} EVENT DETECTED!`);
             return {
                 importance: 'LIVE',
-                suggestedInterval: 20, // Tweet every 20 mins during live match
-                reason: `Live ${hasMajorEvent ? 'major tournament' : 'match'} detected`,
-                isLiveMatch: true
+                suggestedInterval: 20,
+                reason: `Live ${category} event in progress`,
+                isLiveEvent: true
             };
         }
 
-        // Use AI for edge cases
-        if (hasMajorEvent) {
-            const prompt = `Analyze these cricket news headlines. Is a MAJOR match currently LIVE (happening right now)?
+        // Use AI to determine urgency
+        const prompt = `Analyze these ${category} headlines. Is there a MAJOR event currently LIVE or very HIGH URGENCY breaking news?
 
-Headlines: "${headlinesText.slice(0, 300)}"
+Headlines: "${headlinesText.slice(0, 400)}"
 
-Answer in JSON:
+Respond in JSON ONLY:
 {
-  "isLive": true/false,
+  "isLiveOrUrgent": true/false,
   "importance": "LIVE" or "HIGH" or "NORMAL",
-  "reason": "brief reason"
+  "reason": "brief reason why"
 }`;
 
-            try {
-                const response = await this.generate(prompt);
-                const match = response.match(/\{[\s\S]*\}/);
-                if (match) {
-                    const result = JSON.parse(match[0]);
-                    if (result.isLive || result.importance === 'LIVE') {
-                        log.info('🏏🔴 AI detected LIVE match:', result.reason);
-                        return {
-                            importance: 'LIVE',
-                            suggestedInterval: 20,
-                            reason: result.reason || 'AI detected live match',
-                            isLiveMatch: true
-                        };
-                    }
-                    if (result.importance === 'HIGH') {
-                        return {
-                            importance: 'HIGH',
-                            suggestedInterval: 45,
-                            reason: result.reason || 'Major cricket event',
-                            isLiveMatch: false
-                        };
-                    }
+        try {
+            const response = await this.generate(prompt);
+            const match = response.match(/\{[\s\S]*\}/);
+            if (match) {
+                const result = JSON.parse(match[0]);
+                if (result.isLiveOrUrgent || result.importance === 'LIVE') {
+                    log.info(`⚡🔴 AI detected URGENT ${category}:`, result.reason);
+                    return {
+                        importance: 'LIVE',
+                        suggestedInterval: 20,
+                        reason: result.reason || 'AI detected live urgency',
+                        isLiveEvent: true
+                    };
                 }
-            } catch {
-                // AI failed, use keyword-based
+                if (result.importance === 'HIGH') {
+                    return {
+                        importance: 'HIGH',
+                        suggestedInterval: 45,
+                        reason: result.reason || `High priority ${category} news`,
+                        isLiveEvent: false
+                    };
+                }
             }
+        } catch {
+            // Fallback to keyword-based
         }
 
         // Default: Normal mode
         return {
             importance: 'NORMAL',
             suggestedInterval: 85,
-            reason: 'Regular cricket news',
-            isLiveMatch: false
+            reason: `Regular ${category} updates`,
+            isLiveEvent: false
         };
+    }
+
+    // Alias for backward compatibility
+    async evaluateMatchImportance(headlines: string[]): Promise<any> {
+        return this.evaluateContentUrgency(headlines, 'cricket');
     }
 
     // 🛡️ Content Moderation - Check if topic is appropriate

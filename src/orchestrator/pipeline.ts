@@ -211,7 +211,7 @@ export class Pipeline {
                 const fullTweet = `${emoji} ${updateLabel}\n\n${customTweet}\n\n${hashtags}`;
 
                 // Generate image
-                const imagePath = await this.imageService.generateCricketImage(customTweet);
+                const imagePath = await this.imageService.generateNewsImage(customTweet);
 
                 let tweetIds: string[] = [];
                 let success = false;
@@ -372,9 +372,9 @@ export class Pipeline {
                     };
                 }
 
-                // Generate cricket image
-                log.info('🖼️ Generating cricket image...');
-                const imagePath = await this.imageService.generateCricketImage(firstTweet);
+                // Generate contextual image
+                log.info(`🖼️ Generating AI image for ${sheetConfig.activeCategory}...`);
+                const imagePath = await this.imageService.generateNewsImage(firstTweet);
 
                 let tweetIds: string[] = [];
                 let success = false;

@@ -32,3 +32,4 @@ memory/
 # Generated files
 temp/
 preview/
+tweet_stats.json

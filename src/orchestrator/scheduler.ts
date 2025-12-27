@@ -4,6 +4,7 @@ import { log } from '../utils/logger';
 import { getBeastMode } from '../services/ai/beast-mode.service';
 import { FetcherAgent } from '../agents/fetcher.agent';
 import { getSheetConfig } from '../services/config/sheets.service';
+import statsService from '../services/stats/stats.service';
 
 // Smart Scheduler with Google Sheets Remote Control
 export class Scheduler {
@@ -12,8 +13,6 @@ export class Scheduler {
     private intervalId: NodeJS.Timeout | null = null;
     private isRunning: boolean = false;
     private currentMode: 'NORMAL' | 'LIVE' | 'HIGH' = 'NORMAL';
-    private tweetsToday: number = 0;
-    private lastResetDate: string = new Date().toDateString();
 
     constructor() {
         this.pipeline = new Pipeline();
@@ -37,15 +36,14 @@ export class Scheduler {
 
         // Fetch config from Google Sheets
         const sheetConfig = await getSheetConfig().getConfig();
+        const stats = statsService.getStats();
 
-        // Log sheet config
-        log.info('📊 SHEET CONFIG:', {
+        // Log sheet config & stats
+        log.info('📊 BOT STATUS:', {
             activeCategory: sheetConfig.activeCategory,
-            tweetInterval: sheetConfig.tweetInterval,
-            maxDailyTweets: sheetConfig.maxDailyTweets,
+            tweetsToday: stats.tweetsToday,
+            remainingQuota: stats.remainingQuota,
             isActive: sheetConfig.isActive,
-            isNewsTweet: sheetConfig.isNewsTweet,
-            customTopic: sheetConfig.customTopic,
         });
 
         // Check if bot is disabled from sheet
@@ -56,18 +54,13 @@ export class Scheduler {
             return;
         }
 
-        // Reset daily counter at midnight
-        const today = new Date().toDateString();
-        if (this.lastResetDate !== today) {
-            this.tweetsToday = 0;
-            this.lastResetDate = today;
-            log.info('📅 Daily tweet counter reset');
-        }
-
-        // Use maxDailyTweets from sheet
+        // Use maxDailyTweets from sheet vs persistent stats
         const maxDaily = sheetConfig.maxDailyTweets || 17;
-        if (this.tweetsToday >= maxDaily) {
-            log.warn(`⚠️ Daily limit reached (${this.tweetsToday}/${maxDaily}). Waiting for midnight reset.`);
+        const currentSent = stats.tweetsToday;
+
+        if (currentSent >= maxDaily || stats.remainingQuota <= 0) {
+            log.warn(`⚠️ Daily limit reached (${currentSent}/${maxDaily}). Remaining Quota: ${stats.remainingQuota}. Waiting for reset.`);
+            // Check again in 1 hour
             this.intervalId = setTimeout(() => this.scheduleNext(), 60 * 60 * 1000);
             return;
         }
@@ -83,7 +76,7 @@ export class Scheduler {
 
                 if (headlines.length > 0) {
                     const ai = getBeastMode();
-                    const evaluation = await ai.evaluateMatchImportance(headlines);
+                    const evaluation = await ai.evaluateContentUrgency(headlines, sheetConfig.activeCategory);
 
                     this.currentMode = evaluation.importance;
                     // Use AI suggested interval only if it's shorter
@@ -91,15 +84,15 @@ export class Scheduler {
                         interval = evaluation.suggestedInterval;
                     }
 
-                    if (evaluation.isLiveMatch) {
-                        log.info(`🏏🔴 LIVE MODE: ${evaluation.reason}`);
+                    if (evaluation.isLiveEvent) {
+                        log.info(`⚡🔴 LIVE ${sheetConfig.activeCategory.toUpperCase()} MODE: ${evaluation.reason}`);
                         log.info(`⚡ Interval set to ${interval} mins for live coverage`);
                     } else {
-                        log.info(`📊 Mode: ${evaluation.importance} | Interval: ${interval} mins`);
+                        log.info(`📊 Mode: ${evaluation.importance} | Category: ${sheetConfig.activeCategory} | Interval: ${interval} mins`);
                     }
                 }
             } catch (err: any) {
-                log.warn('Could not evaluate match importance, using sheet interval');
+                log.warn('Could not evaluate urgency, using sheet interval');
             }
         } else {
             log.info(`🎯 Custom Topic Mode: "${sheetConfig.customTopic}"`);
@@ -107,9 +100,9 @@ export class Scheduler {
 
         // Run the pipeline
         await this.runPipeline();
-        this.tweetsToday++;
 
-        log.info(`📊 Tweets today: ${this.tweetsToday}/${maxDaily}`);
+        const updatedStats = statsService.getStats();
+        log.info(`📊 Tweets today: ${updatedStats.tweetsToday}/${maxDaily}`);
 
         // Schedule next run using sheet interval
         const nextRunMs = interval * 60 * 1000;
@@ -167,11 +160,12 @@ export class Scheduler {
         tweetsToday: number;
         maxDaily: number;
     } {
+        const stats = statsService.getStats();
         return {
             running: this.isRunning,
             mode: this.currentMode,
-            tweetsToday: this.tweetsToday,
-            maxDaily: 17, // Default, actual value comes from sheet
+            tweetsToday: stats.tweetsToday,
+            maxDaily: 17, // Default
         };
     }
 }

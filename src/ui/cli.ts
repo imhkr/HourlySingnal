@@ -53,6 +53,7 @@ export class CLI {
                     { name: '▶️  Run now (Full Auto + AI Opinion)', value: 'run_auto' },
                     { name: '⏰ Start scheduler (automatic)', value: 'start_scheduler' },
                     { name: '🧪 Dry run (test without tweeting)', value: 'dry_run' },
+                    { name: '📊 Check Twitter Quota', value: 'check_quota' },
                     { name: '🔑 Verify Twitter credentials', value: 'verify_twitter' },
                     { name: '❌ Exit', value: 'exit' },
                 ],
@@ -71,6 +72,9 @@ export class CLI {
                 break;
             case 'dry_run':
                 await this.dryRun();
+                break;
+            case 'check_quota':
+                await this.checkQuota();
                 break;
             case 'verify_twitter':
                 await this.verifyTwitter();
@@ -195,12 +199,12 @@ export class CLI {
         const hashtags = sheetConfig.hashtags?.join(' ') || '#News #Breaking';
         const botName = sheetConfig.botName || 'HourlySignal';
         const isCustomMode = !sheetConfig.isNewsTweet && sheetConfig.customTopic;
-        const updateLabel = isCustomMode ? 'UPDATE' : `${sheetConfig.activeCategory.toUpperCase()} UPDATE`;
+        const updateLabel = isCustomMode ? 'UPDATE' : sheetConfig.activeCategory.replace(/-/g, ' ').toUpperCase() + ' UPDATE';
 
         const fullTweet = `${emoji} ${updateLabel}\n\n${tweetText}\n\n${hashtags}`;
 
         // Generate image
-        const imagePath = await imageService.generateCricketImage(tweetText);
+        const imagePath = await imageService.generateNewsImage(tweetText);
 
         // Create HTML preview
         const fs = await import('fs');
@@ -322,6 +326,35 @@ export class CLI {
 
         // Cleanup
         imageService.cleanup();
+    }
+
+    /**
+     * Check Twitter quota and local stats
+     */
+    private async checkQuota(): Promise<void> {
+        console.log(chalk.cyan('\n📊 Twitter Quota & Stats:\n'));
+
+        try {
+            const { statsService } = await import('../services/stats/stats.service');
+            const stats = statsService.getStats();
+
+            console.log(chalk.white(`  Tweets sent today: ${chalk.bold(stats.tweetsToday)} / 17`));
+
+            if (stats.remainingQuota !== undefined) {
+                const color = stats.remainingQuota > 0 ? chalk.green : chalk.red;
+                console.log(chalk.white(`  API Quota remaining: ${color.bold(stats.remainingQuota)}`));
+            }
+
+            if (stats.resetTime) {
+                const resetDate = new Date(stats.resetTime * 1000);
+                console.log(chalk.gray(`  Quota resets at: ${resetDate.toLocaleString('en-IN')}`));
+            }
+
+            console.log(chalk.gray(`\n  * Persistent data saved in tweet_stats.json`));
+        } catch (error) {
+            console.log(chalk.red('❌ Could not load statistics'));
+        }
+        console.log('');
     }
 
     /**

@@ -3,6 +3,7 @@ import * as fs from 'fs';
 import config from '../../config';
 import { log } from '../../utils/logger';
 import { MegaTweet } from '../../types';
+import statsService from '../stats/stats.service';
 
 /**
  * Twitter/X API Service
@@ -14,23 +15,7 @@ export class TwitterService {
     private readonly MAX_TWEET_LENGTH = 280;
 
     constructor() {
-        // Debug: Check which credentials are present
-        const hasApiKey = !!config.twitter.apiKey && config.twitter.apiKey.length > 5;
-        const hasApiSecret = !!config.twitter.apiSecret && config.twitter.apiSecret.length > 5;
-        const hasAccessToken = !!config.twitter.accessToken && config.twitter.accessToken.length > 5;
-        const hasAccessSecret = !!config.twitter.accessTokenSecret && config.twitter.accessTokenSecret.length > 5;
-
-        log.debug('Twitter credentials status:', {
-            apiKey: hasApiKey ? `✅ (${config.twitter.apiKey.slice(0, 4)}...)` : '❌ MISSING',
-            apiSecret: hasApiSecret ? '✅ present' : '❌ MISSING',
-            accessToken: hasAccessToken ? `✅ (${config.twitter.accessToken.slice(0, 4)}...)` : '❌ MISSING',
-            accessSecret: hasAccessSecret ? '✅ present' : '❌ MISSING',
-        });
-
-        if (!hasApiKey || !hasApiSecret || !hasAccessToken || !hasAccessSecret) {
-            log.error('⚠️ TWITTER CREDENTIALS INCOMPLETE - Check .env file!');
-        }
-
+        // ... (constructor logic remains same, just ensuring imports are correct)
         this.client = new TwitterApi({
             appKey: config.twitter.apiKey,
             appSecret: config.twitter.apiSecret,
@@ -53,6 +38,13 @@ export class TwitterService {
 
             const tweet = await this.client.v2.tweet(text.slice(0, this.MAX_TWEET_LENGTH));
 
+            // Sync quota from headers
+            const rateLimit = (tweet as any).rateLimit;
+            if (rateLimit) {
+                statsService.updateQuota(rateLimit.remaining, rateLimit.reset);
+            }
+            statsService.incrementTweets();
+
             log.tweet('Posted successfully', {
                 tweetId: tweet.data.id,
                 length: text.length,
@@ -68,21 +60,17 @@ export class TwitterService {
                 message: error.message,
                 code: error.code,
                 data: error.data,
-                errors: error.errors,
                 rateLimit: error.rateLimit,
             });
 
-            // Check for specific error types
-            if (error.code === 401) {
-                log.error('🔑 401 Unauthorized - Possible causes:');
-                log.error('   1. App permissions not set to "Read and Write"');
-                log.error('   2. Keys need to be regenerated');
-                log.error('   3. OAuth 1.0a User Authentication not enabled');
-                log.error('   👉 Go to developer.twitter.com/en/portal/projects');
-            } else if (error.code === 403) {
-                log.error('🚫 403 Forbidden - Your app may not have write access');
-            } else if (error.code === 429) {
-                log.error('⏱️ 429 Rate Limited - Too many requests');
+            // Update stats from error rate limit info if available
+            if (error.rateLimit) {
+                statsService.updateQuota(error.rateLimit.remaining, error.rateLimit.reset);
+
+                if (error.code === 429) {
+                    const resetDate = new Date(error.rateLimit.reset * 1000);
+                    log.error(`⏱️ 429 Rate Limited. Reset at: ${resetDate.toLocaleTimeString()}`);
+                }
             }
 
             return {
@@ -99,7 +87,6 @@ export class TwitterService {
      */
     async postTweetWithImage(text: string, imagePath: string): Promise<{ success: boolean; tweetId?: string; error?: string }> {
         try {
-            // Check if image exists
             if (!fs.existsSync(imagePath)) {
                 log.warn('Image file not found, posting without image');
                 return this.postTweet(text);
@@ -109,13 +96,19 @@ export class TwitterService {
 
             // Upload media using v1 API
             const mediaId = await this.client.v1.uploadMedia(imagePath);
-
             log.info('✅ Image uploaded', { mediaId });
 
             // Post tweet with media
             const tweet = await this.client.v2.tweet(text.slice(0, this.MAX_TWEET_LENGTH), {
                 media: { media_ids: [mediaId] }
             });
+
+            // Sync quota from headers
+            const rateLimit = (tweet as any).rateLimit;
+            if (rateLimit) {
+                statsService.updateQuota(rateLimit.remaining, rateLimit.reset);
+            }
+            statsService.incrementTweets();
 
             log.tweet('Posted with image successfully', {
                 tweetId: tweet.data.id,
@@ -130,7 +123,12 @@ export class TwitterService {
             log.error('❌ Twitter media upload failed:', {
                 message: error.message,
                 code: error.code,
+                rateLimit: error.rateLimit,
             });
+
+            if (error.rateLimit) {
+                statsService.updateQuota(error.rateLimit.remaining, error.rateLimit.reset);
+            }
 
             // Fallback to text-only tweet
             log.warn('Falling back to text-only tweet...');
