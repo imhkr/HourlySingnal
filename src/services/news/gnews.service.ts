@@ -74,18 +74,20 @@ export class GNewsService implements INewsFetcher {
         throw new Error('All GNews API keys exhausted');
     }
 
-    async fetchNews(category: NewsCategory, limit: number = 5): Promise<NewsArticle[]> {
+    async fetchNews(category: NewsCategory, limit: number = 10, customQuery?: string): Promise<NewsArticle[]> {
         try {
-            const params = this.buildParams(category);
+            const params = this.buildParams(category, customQuery);
+            const safeLimit = Math.min(limit, 10); // GNews free tier limit is 10
 
-            log.api('GNews', '/top-headlines', 0);
+            log.info(`[NEWS] GNews fetching { category: "${category}", limit: ${safeLimit}${customQuery ? ', query: "' + customQuery + '"' : ''} }`);
 
-            const data = await this.request('/top-headlines', {
+            const endpoint = (params.q || customQuery) ? '/search' : '/top-headlines';
+            const data = await this.request(endpoint, {
                 ...params,
-                max: limit,
+                max: safeLimit,
             });
 
-            log.api('GNews', '/top-headlines', 200);
+            log.api('GNews', endpoint, 200);
             log.news('Fetched articles from GNews', category, {
                 count: data.articles?.length || 0
             });
@@ -94,7 +96,8 @@ export class GNewsService implements INewsFetcher {
         } catch (error: any) {
             log.error('GNews fetch failed', {
                 category,
-                error: error.message
+                error: error.message,
+                customQuery
             });
             return [];
         }
@@ -125,7 +128,14 @@ export class GNewsService implements INewsFetcher {
         }
     }
 
-    private buildParams(category: NewsCategory): Record<string, string> {
+    private buildParams(category: NewsCategory, customQuery?: string): any {
+        if (customQuery) {
+            return {
+                lang: 'en',
+                q: customQuery,
+            };
+        }
+
         switch (category) {
             case 'indian-news':
                 return {
@@ -162,10 +172,9 @@ export class GNewsService implements INewsFetcher {
                 };
 
             case 'cricket':
-                // Simple query for reliability
                 return {
                     lang: 'en',
-                    q: 'cricket IPL Ashes',
+                    q: 'cricket',
                 };
 
             case 'indian-youtuber':
@@ -191,27 +200,40 @@ export class GNewsService implements INewsFetcher {
             default:
                 return {
                     lang: 'en',
-                    topic: 'breaking-news',
+                    q: category,
                 };
         }
     }
 
     private transformArticles(articles: any[], category: NewsCategory): NewsArticle[] {
-        const cutoff = Date.now() - 24 * 60 * 60 * 1000;
+        const cutoff = Date.now() - 12 * 60 * 60 * 1000; // Max 12 hours old
 
-        return articles
-            .map((article: any) => ({
-                title: article.title || '',
-                description: article.description || '',
-                content: article.content || '',
-                source: article.source?.name || 'Unknown',
-                sourceUrl: article.source?.url || '',
-                url: article.url || '',
-                imageUrl: article.image || '',
-                publishedAt: new Date(article.publishedAt || Date.now()),
-                category,
-            }))
-            .filter(article => article.publishedAt.getTime() > cutoff);
+        const mapped = articles
+            .map((article: any) => {
+                const pubDate = new Date(article.publishedAt || Date.now());
+                log.debug(`GNews: "${article.title.slice(0, 30)}..." | Date: ${pubDate.toISOString()}`);
+                return {
+                    title: article.title || '',
+                    description: article.description || '',
+                    content: article.content || '',
+                    source: article.source?.name || 'Unknown',
+                    sourceUrl: article.source?.url || '',
+                    url: article.url || '',
+                    imageUrl: article.image || '',
+                    publishedAt: pubDate,
+                    category,
+                };
+            });
+
+        const fresh = mapped.filter(article => article.publishedAt.getTime() > cutoff);
+
+        if (mapped.length > 0 && fresh.length === 0) {
+            const freshest = Math.max(...mapped.map(a => a.publishedAt.getTime()));
+            const hoursOld = ((Date.now() - freshest) / (1000 * 60 * 60)).toFixed(1);
+            log.warn(`⚠️ All GNews articles for ${category} are stale. Freshest is ${hoursOld}h old (Max: 12h).`);
+        }
+
+        return fresh;
     }
 }
 

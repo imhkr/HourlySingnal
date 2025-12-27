@@ -224,6 +224,34 @@ OPINION:`;
             .trim();
     }
 
+    async generateSearchQuery(category: string): Promise<string> {
+        const prompt = `Act as an SEO News Expert. Convert this category into a single search query (keywords only).
+Focus on keywords that find BREAKING news and LIVE updates from the LAST 1-2 HOURS.
+
+Category: "${category}"
+
+CRITICAL RULES:
+1. OUTPUT ONLY THE KEYWORDS.
+2. NO MARKDOWN, NO BOLDING, NO QUOTES.
+3. NO NUMBERED LISTS, NO BULLETS.
+4. NO EXPLANATIONS OR META-TEXT.
+5. Max 3-5 words.
+
+SEARCH QUERY:`;
+
+        const result = await this.generate(prompt);
+        return result
+            .replace(/[*#]/g, '') // Remove markdown bold/headers
+            .replace(/['"]/g, '')
+            .replace(/^(Keywords|Search|Query|Search Query)[:\s]*/gi, '')
+            .replace(/\d+\.|[-•]/g, '') // Remove list numbers or bullets
+            .replace(/\s+/g, ' ')
+            .trim()
+            .split(' ')
+            .slice(0, 5)
+            .join(' ');
+    }
+
     async generateImagePrompt(summary: string, category: string = 'news'): Promise<string> {
         // Add randomness for varied images
         const styles = ['cinematic', 'dramatic', 'artistic', 'photorealistic', 'atmospheric', 'vibrant'][Math.floor(Math.random() * 6)];

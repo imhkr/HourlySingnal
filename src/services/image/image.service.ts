@@ -78,6 +78,31 @@ export class ImageService {
         return this.generateImage(prompt, category);
     }
 
+    async generateImageByCategory(category: string): Promise<string | null> {
+        const moods = ['dramatic', 'cinematic', 'atmospheric', 'majestic', 'epic', 'stunning'][Math.floor(Math.random() * 6)];
+        const times = ['golden hour', 'sunset', 'sunrise', 'dusk', 'dawn', 'twilight'][Math.floor(Math.random() * 6)];
+        const angles = ['wide angle', 'aerial view', 'close-up detail', 'panoramic', 'ground level', 'bird eye view'][Math.floor(Math.random() * 6)];
+
+        const categoryLower = category.toLowerCase();
+        let prompt = `news update, professional journalism, modern media, ${moods}, ${times}`;
+
+        if (categoryLower.includes('cricket')) {
+            prompt = `Cricket stadium action, cricket bat ball wicket, ${moods} sports photography, ${times} lighting`;
+        } else if (categoryLower.includes('football')) {
+            prompt = `Football match action, soccer stadium crowd, ${moods} sports scene, ${times}`;
+        } else if (categoryLower.includes('technology')) {
+            prompt = `Technology futuristic, ${moods} digital innovation, circuits and screens, ${angles}`;
+        } else if (categoryLower.includes('sports')) {
+            prompt = `Sports action, ${moods} athletic moment, ${times} lighting`;
+        } else if (categoryLower.includes('indian-news')) {
+            prompt = `India cityscape, ${moods} urban scene, ${times}, professional news`;
+        } else if (categoryLower.includes('international')) {
+            prompt = `World news, global cityscape, ${moods} international scene, ${times}`;
+        }
+
+        return this.generateImage(prompt, category);
+    }
+
     async generateCricketImage(content: string): Promise<string | null> {
         return this.generateNewsImage(content);
     }

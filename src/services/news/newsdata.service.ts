@@ -17,21 +17,23 @@ export class NewsDataService implements INewsFetcher {
         });
     }
 
-    async fetchNews(category: NewsCategory, limit: number = 5): Promise<NewsArticle[]> {
+    async fetchNews(category: NewsCategory, limit: number = 10, customQuery?: string): Promise<NewsArticle[]> {
         let attempts = 0;
 
         while (attempts < this.apiKeys.length) {
             try {
                 const apiKey = this.apiKeys[this.currentKeyIndex];
-                const params = this.buildParams(category);
+                const params = this.buildParams(category, customQuery);
 
                 log.api('NewsData.io', '/news', 0);
+
+                log.info(`[NEWS] NewsData fetching { category: "${category}", limit: 10${customQuery ? ', query: "' + customQuery + '"' : ''} }`);
 
                 const response = await this.client.get('/news', {
                     params: {
                         apikey: apiKey,
                         ...params,
-                        size: limit,
+                        size: 10,
                     },
                 });
 
@@ -74,7 +76,14 @@ export class NewsDataService implements INewsFetcher {
         return [];
     }
 
-    private buildParams(category: NewsCategory): Record<string, string> {
+    private buildParams(category: NewsCategory, customQuery?: string): any {
+        if (customQuery) {
+            return {
+                language: 'en',
+                q: customQuery,
+            };
+        }
+
         switch (category) {
             case 'indian-news':
                 return {
@@ -143,24 +152,38 @@ export class NewsDataService implements INewsFetcher {
             default:
                 return {
                     language: 'en',
+                    q: category,
                     category: 'top',
                 };
         }
     }
 
     private transformArticles(results: any[], category: NewsCategory): NewsArticle[] {
-        const cutoff = Date.now() - 24 * 60 * 60 * 1000;
+        const cutoff = Date.now() - 12 * 60 * 60 * 1000; // Max 12 hours old
 
-        return results
-            .map((r: any) => ({
-                title: r.title,
-                description: r.description || '',
-                source: r.source_id || 'NewsData',
-                url: r.link, // 'link' is the correct property for NewsData, not 'url'
-                publishedAt: new Date(r.pubDate || Date.now()),
-                category,
-            }))
-            .filter(a => a.publishedAt.getTime() > cutoff);
+        const filtered = results
+            .map((r: any) => {
+                const pubDate = new Date(r.pubDate || Date.now());
+                log.debug(`NewsData: "${r.title.slice(0, 30)}..." | Date: ${pubDate.toISOString()}`);
+                return {
+                    title: r.title,
+                    description: r.description || '',
+                    source: r.source_id || 'NewsData',
+                    url: r.link,
+                    publishedAt: pubDate,
+                    category,
+                };
+            });
+
+        const fresh = filtered.filter(a => a.publishedAt.getTime() > cutoff);
+
+        if (filtered.length > 0 && fresh.length === 0) {
+            const freshest = Math.max(...filtered.map(a => a.publishedAt.getTime()));
+            const hoursOld = ((Date.now() - freshest) / (1000 * 60 * 60)).toFixed(1);
+            log.warn(`⚠️ All NewsData articles for ${category} are stale. Freshest is ${hoursOld}h old (Max: 12h).`);
+        }
+
+        return fresh;
     }
 }
 

@@ -3,22 +3,33 @@ import { NewsDataService } from '../services/news/newsdata.service';
 import { GNewsService } from '../services/news/gnews.service';
 import { log } from '../utils/logger';
 import { getSheetConfig } from '../services/config/sheets.service';
+import { getBeastMode, BeastModeAI } from '../services/ai/beast-mode.service';
 
 export class FetcherAgent {
     private newsDataService: NewsDataService;
     private gNewsService: GNewsService;
+    private ai: BeastModeAI;
 
     constructor() {
         this.newsDataService = new NewsDataService();
         this.gNewsService = new GNewsService();
+        this.ai = getBeastMode();
     }
 
-    async fetch(category: NewsCategory, limit: number = 5): Promise<NewsArticle[]> {
+    async fetch(category: NewsCategory, limit: number = 10): Promise<NewsArticle[]> {
         log.news('Fetching started', category, { limit });
 
+        let optimizedQuery: string | undefined;
+        try {
+            optimizedQuery = await this.ai.generateSearchQuery(category);
+            log.info(`[NEWS] AI optimized query for ${category}: "${optimizedQuery}"`);
+        } catch (err) {
+            log.warn('AI query optimization failed, using raw category');
+        }
+
         const [newsDataArticles, gNewsArticles] = await Promise.all([
-            this.newsDataService.fetchNews(category, limit),
-            this.gNewsService.fetchNews(category, limit),
+            this.newsDataService.fetchNews(category, limit, optimizedQuery),
+            this.gNewsService.fetchNews(category, limit, optimizedQuery),
         ]);
 
         log.news('Fetched from sources', category, {
@@ -80,9 +91,19 @@ export class FetcherAgent {
     }
 
     private sortByRecency(articles: NewsArticle[]): NewsArticle[] {
-        return articles.sort((a, b) =>
-            b.publishedAt.getTime() - a.publishedAt.getTime()
-        );
+        const oneHourAgo = Date.now() - 60 * 60 * 1000;
+
+        return articles.sort((a, b) => {
+            const aFresh = a.publishedAt.getTime() > oneHourAgo;
+            const bFresh = b.publishedAt.getTime() > oneHourAgo;
+
+            // Priority: under 1 hour first
+            if (aFresh && !bFresh) return -1;
+            if (!aFresh && bFresh) return 1;
+
+            // Then sort by recency
+            return b.publishedAt.getTime() - a.publishedAt.getTime();
+        });
     }
 
     private getUniqueSources(articles: NewsArticle[]): string[] {

@@ -224,7 +224,10 @@ export class Pipeline {
 
                 const fullTweet = `${emoji}\n\n${customTweet}\n\n${hashtags}`;
 
-                const imagePath = await this.imageService.generateNewsImage(customTweet);
+                let imagePath: string | null = null;
+                if (sheetConfig.generateImage) {
+                    imagePath = await this.imageService.generateNewsImage(customTweet);
+                }
 
                 let tweetIds: string[] = [];
                 let success = false;
@@ -253,11 +256,10 @@ export class Pipeline {
                 for (const category of categories) {
                     log.info(`Processing category: ${category}`);
 
-                    const articles = await this.fetcher.fetch(category, 5);
+                    const articles = await this.fetcher.fetch(category, 10);
 
                     if (articles.length === 0) {
-                        log.warn(`No articles found for ${category}`);
-                        summaries.set(category, 'No updates at this time');
+                        log.warn(`No fresh articles found for ${category}. Skipping.`);
                         continue;
                     }
 
@@ -310,6 +312,16 @@ export class Pipeline {
                     await this.delay(1000);
                 }
 
+                // Abort if no fresh news found
+                if (summaries.size === 0) {
+                    log.warn('❌ No fresh news found for any category. Skipping tweet.');
+                    return {
+                        success: false,
+                        tweetIds: [],
+                        summaries
+                    };
+                }
+
                 const headline = await this.headlineAgent.generate(summaries);
 
                 // AUTO-OPINION: If no user opinion, generate one via AI
@@ -335,25 +347,21 @@ export class Pipeline {
                     charCount: megaTweet.characterCount,
                 });
 
-                log.info('🔥 Running virality check...');
+                log.info('📊 Checking tweet quality...');
 
                 const viralResult = await this.viralityAgent.ensureViral(
                     megaTweet.tweets[0],
-                    2 // max 2 enhancement iterations
+                    1 // just check score, minimal enhancement
                 );
 
-                if (viralResult.wasEnhanced) {
-                    log.info('⚡ Tweet was enhanced for virality!', {
-                        score: viralResult.viralityScore.toFixed(1),
-                        hashtags: viralResult.hashtags,
-                        hook: viralResult.engagementHook.slice(0, 50),
-                    });
+                log.info(`📊 Tweet quality score: ${viralResult.viralityScore.toFixed(1)}/10`);
 
+                // Only use enhanced version if original was really bad (score < 4)
+                if (viralResult.wasEnhanced && viralResult.viralityScore >= 6) {
+                    log.info('✅ Using enhanced tweet (major improvement)');
                     megaTweet.tweets[0] = viralResult.finalTweet;
                 } else {
-                    log.info('✅ Tweet already viral-ready!', {
-                        score: viralResult.viralityScore.toFixed(1),
-                    });
+                    log.info('✅ Using original tweet (fresh news > virality)');
                 }
 
                 const firstTweet = megaTweet.tweets[0] || '';
@@ -367,7 +375,10 @@ export class Pipeline {
                 }
 
                 log.info(`🖼️ Generating AI image for ${sheetConfig.activeCategory}...`);
-                const imagePath = await this.imageService.generateNewsImage(firstTweet);
+                let imagePath: string | null = null;
+                if (sheetConfig.generateImage) {
+                    imagePath = await this.imageService.generateImageByCategory(sheetConfig.activeCategory);
+                }
 
                 let tweetIds: string[] = [];
                 let success = false;
@@ -377,10 +388,11 @@ export class Pipeline {
                     const imgResult = await this.twitter.postTweetWithImage(firstTweet, imagePath);
                     success = imgResult.success;
                     if (imgResult.tweetId) tweetIds = [imgResult.tweetId];
-                    // Cleanup temp image
                     this.imageService.cleanup();
                 } else {
-                    log.warn('Image generation failed, posting text only...');
+                    if (sheetConfig.generateImage) {
+                        log.warn('Image generation failed, posting text only...');
+                    }
                     const textResult = await this.twitter.postMegaTweet(megaTweet);
                     success = textResult.success;
                     tweetIds = textResult.tweetIds;

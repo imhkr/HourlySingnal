@@ -9,11 +9,12 @@ export interface SheetConfig {
     botName: string;
     botEmoji: string;
     hashtags: string[];
-    tweetInterval: number;      // Gap between tweets (minutes)
-    maxDailyTweets: number;     // Max tweets per day
+    tweetInterval: number;
+    maxDailyTweets: number;
     isActive: boolean;
-    isNewsTweet: boolean;       // true = news mode, false = custom topic mode
-    customTopic: string;        // Custom topic when isNewsTweet = false
+    isNewsTweet: boolean;
+    customTopic: string;
+    generateImage: boolean;
 }
 
 // Default config if sheet fetch fails
@@ -28,6 +29,7 @@ const DEFAULT_CONFIG: SheetConfig = {
     isActive: true,
     isNewsTweet: true,
     customTopic: '',
+    generateImage: true,
 };
 
 // Connects to a public Google Sheet CSV for remote control
@@ -99,6 +101,7 @@ export class GoogleSheetsConfig {
             isActive: config['isActive']?.toLowerCase() !== 'false',
             isNewsTweet: config['isNewsTweet']?.toLowerCase() !== 'false',
             customTopic: config['customTopic'] || '',
+            generateImage: config['generateImage']?.toLowerCase() !== 'false',
         };
     }
 

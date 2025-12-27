@@ -53,8 +53,6 @@ Control everything from Google Sheets - **no code changes needed!**
    GOOGLE_SHEET_URL=https://docs.google.com/spreadsheets/d/e/xxxxx/pub?output=csv
    ```
 
-📖 See [GOOGLE_SHEETS_SETUP.md](GOOGLE_SHEETS_SETUP.md) for detailed instructions.
-
 ## 🎯 Two Modes
 
 ### Mode 1: News Mode (Default)
@@ -63,6 +61,10 @@ isNewsTweet = true
 activeCategory = cricket (or football, technology, etc.)
 ```
 Bot fetches latest news, summarizes with AI, and tweets.
+
+> [!NOTE]  
+> **News Freshness & API Plans**:  
+> Most news APIs (GNews, NewsData) have a **12-hour delay** on their Free plans for search results. The bot is optimized to handle this by using a 12-hour freshness window. For true real-time/instant news (less than 1 hour delay), a **Paid API Plan** is recommended.
 
 ### Mode 2: Custom Topic Mode
 ```
@@ -87,7 +89,7 @@ npm install
 cp .env.example .env
 ```
 
-Edit `.env` with your keys (see [API Keys Setup](#api-keys-setup) below).
+Edit `.env` with your keys 
 
 ### 3. Run
 
