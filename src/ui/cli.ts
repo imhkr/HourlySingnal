@@ -54,7 +54,6 @@ export class CLI {
                     { name: '⏰ Start scheduler (automatic)', value: 'start_scheduler' },
                     { name: '🧪 Dry run (test without tweeting)', value: 'dry_run' },
                     { name: '🔑 Verify Twitter credentials', value: 'verify_twitter' },
-                    { name: '📊 View memory stats', value: 'memory_stats' },
                     { name: '❌ Exit', value: 'exit' },
                 ],
             },
@@ -75,9 +74,6 @@ export class CLI {
                 break;
             case 'verify_twitter':
                 await this.verifyTwitter();
-                break;
-            case 'memory_stats':
-                await this.showMemoryStats();
                 break;
             case 'exit':
                 console.log(chalk.cyan('\n👋 Goodbye!\n'));
