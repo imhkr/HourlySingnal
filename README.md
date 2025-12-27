@@ -63,12 +63,12 @@ activeCategory = cricket (or football, technology, etc.)
 ```
 Bot fetches latest news, summarizes with AI, and tweets.
 
-> [!NOTE]  
-> **News Freshness & API Plans**:  
-> Most news APIs (GNews, NewsData) have a **12 to 24-hour delay** on their Free plans for search results. The bot is optimized to handle this by using a 20 to 24-hour freshness window by default. For true real-time/instant news (less than 1 hour delay), a **Paid API Plan** is recommended.  
->   
-> **Data Quality & Accuracy**:  
-> The precision and relevance of the generated tweets are directly dependent on the data quality provided by the News APIs. High-quality API data results in high-quality, accurate tweets.
+> [!IMPORTANT]  
+> **Development Status**: This project is currently **under active development**. You may encounter bugs or unexpected behavior. Feel free to open an issue or contribute!
+> 
+> **Data Quality & Accuracy**: The precision of generated tweets depends directly on the accuracy of the News API data. High-quality input leads to high-quality output.
+> 
+> **News Freshness & API Plans**: Most news APIs (GNews, NewsData) have a **12 to 24-hour delay** on Free plans. The bot uses a 24-hour window to ensure stability. For instant news, a **Paid API Plan** is recommended.
 
 ### Mode 2: Custom Topic Mode
 ```
