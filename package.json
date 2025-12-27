@@ -1,0 +1,41 @@
+{
+  "name": "hourlysignal",
+  "version": "1.0.0",
+  "description": "Reflexion Pattern AI News Agent - Fetches, summarizes, and tweets news hourly",
+  "main": "dist/index.js",
+  "scripts": {
+    "dev": "ts-node src/index.ts",
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "test": "jest",
+    "lint": "eslint src/**/*.ts"
+  },
+  "keywords": [
+    "news",
+    "ai",
+    "twitter",
+    "reflexion",
+    "typescript"
+  ],
+  "author": "HourlySignal",
+  "license": "MIT",
+  "dependencies": {
+    "@google/generative-ai": "^0.24.1",
+    "@mistralai/mistralai": "^1.11.0",
+    "axios": "^1.6.2",
+    "chalk": "^4.1.2",
+    "dotenv": "^16.3.1",
+    "google-trends-api": "^4.9.2",
+    "inquirer": "^8.2.6",
+    "node-cron": "^3.0.3",
+    "twitter-api-v2": "^1.15.2",
+    "winston": "^3.11.0"
+  },
+  "devDependencies": {
+    "@types/inquirer": "^9.0.7",
+    "@types/node": "^20.10.5",
+    "@types/node-cron": "^3.0.11",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.3.3"
+  }
+}
